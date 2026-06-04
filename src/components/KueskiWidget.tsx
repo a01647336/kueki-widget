@@ -9,6 +9,7 @@ import { AuthModal } from './AuthModal';
 import { UserProfile } from './UserProfile';
 import { KueskiPayLogo } from './KueskiPayLogo';
 import type { User, Purchase, CartItem } from '../types';
+import type { ApiUser } from '../utils/api';
 import type { useScore } from '../hooks/useScore';
 import { storage } from '../utils/storage';
 import { formatMXN } from '../utils/payments';
@@ -26,7 +27,7 @@ interface KueskiWidgetProps {
   showAuthModal: boolean;
   forceShowSimulator: boolean;
   onLoginClick: () => void;
-  onAuthSuccess: (email: string) => void;
+  onAuthSuccess: (user: ApiUser) => void;
   onAuthClose: () => void;
   onLogout: () => void;
   onConfirmPurchase: (purchase: Omit<Purchase, 'id' | 'date' | 'status'>) => void;

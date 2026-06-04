@@ -138,6 +138,37 @@ function calculateCashback(amount, level) {
   return Math.round(amount * rate * 100) / 100;
 }
 
+// ─── Motor de elegibilidad (aprobación por múltiples factores) ────────────────
+
+const MIN_PURCHASE = 50;            // monto mínimo financiable
+const MAX_ACTIVE_PURCHASES = 5;     // compras activas simultáneas permitidas
+
+/**
+ * Evalúa si un usuario puede financiar una compra, considerando su historial
+ * y su crédito. Devuelve { approved, reason, message }. `reason` es null si
+ * la compra es elegible, o un código de rechazo en caso contrario.
+ *
+ * @param {object} user       Usuario con `availableCredit`.
+ * @param {number} cartTotal  Monto de la compra en MXN.
+ * @param {object[]} purchases Compras del usuario (para revisar mora y límite).
+ */
+function evaluateEligibility(user, cartTotal, purchases = []) {
+  if (typeof cartTotal !== 'number' || cartTotal < MIN_PURCHASE) {
+    return { approved: false, reason: 'MONTO_INVALIDO', message: `El monto mínimo para diferir es $${MIN_PURCHASE}.` };
+  }
+  if (purchases.some((p) => p.status === 'vencido')) {
+    return { approved: false, reason: 'MORA', message: 'Tienes un pago vencido. Regulariza tu cuenta para usar Kueski Pay.' };
+  }
+  const activos = purchases.filter((p) => p.status === 'activo').length;
+  if (activos >= MAX_ACTIVE_PURCHASES) {
+    return { approved: false, reason: 'LIMITE_COMPRAS_ACTIVAS', message: 'Alcanzaste el máximo de compras activas simultáneas.' };
+  }
+  if (cartTotal > user.availableCredit) {
+    return { approved: false, reason: 'CREDITO_INSUFICIENTE', message: `El monto supera tu crédito disponible ($${user.availableCredit}).` };
+  }
+  return { approved: true, reason: null, message: null };
+}
+
 module.exports = {
   LEVEL_ORDER,
   LEVEL_THRESHOLDS,
@@ -146,9 +177,12 @@ module.exports = {
   LEVEL_MAX_INSTALLMENTS,
   ACTION_POINTS,
   DEFAULT_ACHIEVEMENTS,
+  MIN_PURCHASE,
+  MAX_ACTIVE_PURCHASES,
   computeLevel,
   levelBenefits,
   nextLevelInfo,
   calculatePlans,
   calculateCashback,
+  evaluateEligibility,
 };

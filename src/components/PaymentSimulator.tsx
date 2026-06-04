@@ -31,20 +31,25 @@ export function PaymentSimulator({
     return initial[1] ?? initial[0];
   });
   const [approved, setApproved] = useState(true);
+  const [rejectMessage, setRejectMessage] = useState<string | null>(null);
   const [confirmed, setConfirmed] = useState(false);
 
   const cashback = calculateCashback(cartTotal, userLevel);
   const siteName = SITE_DISPLAY_NAMES[currentSite] ?? currentSite;
 
   // El backend es la autoridad: recalcula los planes según el nivel y el
-  // crédito disponible del usuario. Si no responde, usamos los planes locales.
+  // crédito disponible del usuario, y evalúa la elegibilidad (mora, límite de
+  // compras, crédito, monto). Si no responde, usamos los planes locales.
   useEffect(() => {
     let active = true;
     calculatePlans(cartTotal).then((res) => {
-      if (!active || !res || res.plans.length === 0) return;
-      setPlans(res.plans);
+      if (!active || !res) return;
       setApproved(res.approved);
-      setSelectedPlan(res.plans[1] ?? res.plans[0]);
+      setRejectMessage(res.approved ? null : res.message);
+      if (res.plans.length > 0) {
+        setPlans(res.plans);
+        setSelectedPlan(res.plans[1] ?? res.plans[0]);
+      }
     });
     return () => { active = false; };
   }, [cartTotal]);
@@ -94,7 +99,7 @@ export function PaymentSimulator({
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
           <p className="text-xs text-amber-700">
-            El monto supera tu crédito disponible. Sube de nivel en el Score Coach para ampliar tu límite.
+            {rejectMessage ?? 'Esta compra no puede aprobarse en este momento.'}
           </p>
         </div>
       )}
@@ -152,7 +157,8 @@ export function PaymentSimulator({
         </button>
         <button
           onClick={handleConfirm}
-          className="flex-1 bg-emerald-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
+          disabled={!approved}
+          className="flex-1 bg-emerald-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
         >
           <span>Confirmar con</span>
           {' '}

@@ -4,7 +4,7 @@ import { CartPopup } from './components/CartPopup';
 import { useAuth } from './hooks/useAuth';
 import { useScore } from './hooks/useScore';
 import { storage } from './utils/storage';
-import { savePurchase } from './utils/api';
+import { savePurchase, fetchScore, fetchPurchases, type ApiUser } from './utils/api';
 import { POINTS } from './constants/kueski';
 import type { Purchase, CartItem } from './types';
 
@@ -53,14 +53,24 @@ export default function App({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleLogin = useCallback((email: string) => {
-    auth.login(email);
-    score.addPoints(POINTS.WELCOME);
+  const handleLogin = useCallback((apiUser: ApiUser) => {
+    auth.login(apiUser);
     setShowAuthModal(false);
+    // Hidratar score e historial del usuario autenticado desde el backend,
+    // de modo que cada usuario vea su propia información (no la hardcodeada).
+    fetchScore().then((s) => { if (s) score.setFromServer(s); });
+    fetchPurchases().then((p) => {
+      if (p) {
+        setPurchases(p);
+        storage.setHistory(p);
+      }
+    });
   }, [auth, score]);
 
   const handleLogout = useCallback(() => {
     auth.logout();
+    storage.clearHistory();
+    setPurchases([]);
     setCartTotal(0);
     setCartItems([]);
     setCheckoutOpen(false);

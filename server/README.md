@@ -1,73 +1,60 @@
 # Kueski Widget — Backend
 
-Servidor simple en **Express.js** con persistencia en **archivo JSON** (`kueski_db.json`). No requiere instalación de bases de datos ni dependencias nativas.
+API REST en **Express.js** con **MongoDB** (Mongoose) y autenticación **usuario/contraseña → JWT** (bcrypt + HS256). Multiusuario: cada cuenta tiene su propio perfil, score, crédito, compras y cashback.
 
-- **Auth**: JWT simulado HS256 (`lib/jwt.js`) — el OTP del demo acepta cualquier código de 6 dígitos.
-- **Reglas de negocio**: score → nivel → cashback/crédito/quincenas en `lib/rules.js` (espejo de `src/constants/kueski.ts`).
+- **Reglas de negocio** (score → nivel → cashback/crédito/quincenas) y **motor de elegibilidad** (mora, límite de compras, crédito, monto): `lib/rules.js`.
+- **Modelos y conexión**: `lib/db.js`. **Seed** de usuarios y deals: `lib/seed.js`.
 
-## Requisitos
+## Variables de entorno
 
-- Node.js 18+
+| Variable | Descripción |
+|---|---|
+| `MONGODB_URI` | Connection string de MongoDB (Atlas o local). **Requerida.** |
+| `JWT_SECRET` | Secreto para firmar los JWT. |
+| `PORT` | Puerto (default `3001`). |
+| `NODE_ENV` | `production` en Render. |
 
-## Instalación y arranque
+## Correr en local
 
 ```bash
 cd server
 npm install
-npm start
+MONGODB_URI="mongodb+srv://...." npm start
 ```
 
-El servidor queda disponible en `http://localhost:3001`.
+Al primer arranque se siembran los deals y los **usuarios de demo** (password de todos: `kueski123`):
 
-Variables de entorno opcionales: `PORT` (default 3001), `DB_FILE` (ruta del JSON), `JWT_SECRET`.
+| Usuario | Nivel | Notas |
+|---|---|---|
+| `carlos` | Bronce | |
+| `ana` | Plata | |
+| `diego` | Oro | |
+| `sofia` | Platino | |
+| `pedro` | Plata | tiene un pago **vencido** (demuestra el rechazo por mora) |
+
+## Desplegar en Render
+
+1. Crea un cluster gratis en **MongoDB Atlas** (M0), un usuario de DB y permite el acceso desde `0.0.0.0/0` (Network Access). Copia la connection string.
+2. En **Render** → *New* → *Blueprint* y conecta este repo (usa el `render.yaml` de la raíz), o crea un *Web Service* manual con `rootDir: server`, build `npm install`, start `npm start`.
+3. Configura las env vars: `MONGODB_URI` (tu string de Atlas), `JWT_SECRET`, `NODE_ENV=production`.
+4. La URL pública (`https://<app>.onrender.com`) se usa para construir la extensión:
+   `PLASMO_PUBLIC_API_URL=https://<app>.onrender.com/api npm run build`.
+
+> Plan gratuito: el servicio "duerme" tras ~15 min de inactividad (primer request lento) y el almacenamiento del contenedor es efímero, pero **los datos viven en Atlas**, así que persisten.
 
 ## Endpoints
 
-Autenticación con `Authorization: Bearer <accessToken>` salvo auth y health. Documentación completa en [`../docs/endpoints.md`](../docs/endpoints.md).
+`Authorization: Bearer <accessToken>` salvo `login`, `refresh-token` y `health`. Detalle en [`../docs/endpoints.md`](../docs/endpoints.md).
 
-| # | Método | Ruta | Descripción |
-|---|--------|------|-------------|
-| 1 | `POST` | `/api/auth/send-otp` | Envía código OTP (en dev devuelve `devCode`) |
-| 2 | `POST` | `/api/auth/verify-otp` | Valida código → emite tokens + perfil |
-| 3 | `POST` | `/api/auth/logout` | Cierra sesión |
-| 4 | `POST` | `/api/auth/refresh-token` | Renueva el access token |
-| 5 | `GET`  | `/api/user` | Perfil del usuario autenticado |
-| 6 | `GET`/`PUT` | `/api/user/preferences` | Sitios desactivados y notificaciones |
-| 7 | `GET`/`PUT` | `/api/user/score` | Score Coach (nivel, puntos, logros) |
-| 8 | `POST` | `/api/user/achievements/:id/complete` | Completa un logro (idempotente) |
-| 9 | `GET`  | `/api/deals?site=amazon` | Ofertas activas filtradas por sitio |
-| 10 | `POST` | `/api/deals/:id/subscribe` | Suscribe a alertas de un deal |
-| 11 | `POST` | `/api/purchases/calculate-plans` | **Planes personalizados** por nivel y crédito |
-| 12 | `POST`/`GET` | `/api/purchases` | Registrar / listar compras |
-| 13 | `GET`  | `/api/purchases/:id` | Detalle de una compra |
-| 14 | `PUT`  | `/api/purchases/:id/status` | Actualiza estado (activo → pagado) |
-| 15 | `GET`  | `/api/user/cashback` | Cashback total acumulado y detalle |
-| 16 | `GET`  | `/api/health` | Health check (sin auth) |
-
-## Base de datos
-
-Los datos se guardan en `server/kueski_db.json` (generado automáticamente al primer arranque).
-
-**Estructura:**
-```json
-{
-  "users": [{ "id", "name", "level", "scorePoints", "availableCredit",
-              "preferences", "achievements", "subscriptions", ... }],
-  "deals": [...],
-  "purchases": [...]
-}
-```
-
-## Hot-reload en desarrollo
-
-```bash
-npm run dev
-```
-
-## Cómo funciona con la extensión
-
-1. Inicia el servidor: `cd server && npm start`
-2. Abre Chrome con la extensión cargada
-3. Navega a un sitio compatible (ej: amazon.com.mx)
-4. El widget intentará conectarse a `http://localhost:3001`
-5. Si el servidor no está disponible, el widget sigue funcionando con localStorage
+| Método | Ruta | Descripción |
+|---|---|---|
+| `POST` | `/api/auth/login` | Usuario + contraseña → tokens + perfil |
+| `POST` | `/api/auth/logout` · `/api/auth/refresh-token` | Sesión |
+| `GET` | `/api/user` · `/api/user/preferences` · `/api/user/score` · `/api/user/cashback` | Datos del usuario autenticado |
+| `PUT` | `/api/user/preferences` · `/api/user/score` | Actualizar |
+| `POST` | `/api/user/achievements/:id/complete` | Completar logro |
+| `GET`/`POST` | `/api/deals` · `/api/deals/:id/subscribe` | Promociones |
+| `POST` | `/api/purchases/calculate-plans` | Planes personalizados + **elegibilidad** |
+| `POST`/`GET` | `/api/purchases` | Registrar / listar compras (por usuario) |
+| `GET`/`PUT` | `/api/purchases/:id` · `/api/purchases/:id/status` | Detalle / estado |
+| `GET` | `/api/health` | Health check |

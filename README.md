@@ -44,7 +44,32 @@ El núcleo del sistema: tu **score** determina tu **nivel**, y tu nivel determin
 | 🥇 Oro | 1,500 – 3,999 | 2.5% | $8,001 – $15,000 | 2, 4, 6, 8 | 8q: +1.5% |
 | 💎 Platino | 4,000+ | 5.0% | $15,001 – $25,000 | 2, 4, 6, 8, 12 | >6q: +1.5% |
 
-Un plan se ofrece solo si el monto del carrito **no supera el crédito disponible** del usuario.
+## Aprobación de compra (elegibilidad)
+
+Antes de aprobar una compra, el backend evalúa varios factores y, si no es elegible, el simulador muestra el motivo y bloquea el botón de confirmar:
+
+| Motivo | Cuándo ocurre |
+|---|---|
+| `MONTO_INVALIDO` | El monto es menor a $50. |
+| `MORA` | El usuario tiene un pago **vencido**. |
+| `LIMITE_COMPRAS_ACTIVAS` | Ya tiene 5 compras activas simultáneas. |
+| `CREDITO_INSUFICIENTE` | El monto supera su crédito disponible. |
+
+---
+
+## Cuentas de demo
+
+Multiusuario: cada cuenta tiene **su propio perfil, score, crédito y compras**. Contraseña de todas: **`kueski123`**.
+
+| Usuario | Nivel | Para demostrar |
+|---|---|---|
+| `carlos` | Bronce | planes de 2 y 4 quincenas |
+| `ana` | Plata | hasta 6 quincenas |
+| `diego` | Oro | hasta 8 quincenas |
+| `sofia` | Platino | hasta 12 quincenas, 5% cashback |
+| `pedro` | Plata | **rechazo por mora** (tiene un pago vencido) |
+
+¿No tienes cuenta? El widget incluye un enlace **"Regístrate en Kueski"** que abre el sitio de Kueski.
 
 ---
 
@@ -56,20 +81,20 @@ Un plan se ofrece solo si el monto del carrito **no supera el crédito disponibl
 │  src/contents/kueski.tsx  → content script (Shadow DOM)  │
 │    PriceDetector          → lee precios del DOM real     │
 │    App.tsx + hooks        → useAuth / useScore / cart    │
-│    storage.ts             → chrome.storage + localStorage│
 │    api.ts                 → cliente HTTP (offline-first)  │
 └───────────────┬─────────────────────────────────────────┘
-                │  (si el server está activo)
+                │  HTTPS (Render) · Authorization: Bearer JWT
 ┌───────────────▼─────────────────────────────────────────┐
-│  Backend (Express + JSON DB) · localhost:3001            │
-│  server.js          → 19 endpoints REST                  │
-│  lib/jwt.js         → JWT simulado (HS256)               │
-│  lib/rules.js       → motor de score/nivel/planes        │
-│  kueski_db.json     → persistencia                       │
+│  Backend (Express + MongoDB) · Render                    │
+│  server.js          → API REST multiusuario              │
+│  lib/db.js          → modelos Mongoose (User/Purchase…)  │
+│  lib/jwt.js         → login usuario/contraseña → JWT     │
+│  lib/rules.js       → score/nivel/planes + elegibilidad  │
+│  MongoDB Atlas      → persistencia real                  │
 └─────────────────────────────────────────────────────────┘
 ```
 
-**Híbrido offline-first:** cuando el backend está disponible es la **autoridad** (emite el JWT, calcula los planes personalizados y persiste en la DB). Si no responde, el widget sigue funcionando con `localStorage` — cumpliendo el requisito de operar sin APIs externas.
+**Offline-first:** una sesión iniciada sigue funcionando con `localStorage` si el server no responde; el login y los planes personalizados usan el backend (autoridad) cuando está disponible.
 
 ---
 
@@ -91,18 +116,30 @@ cd server && npm install && cd ..   # dependencias del backend
 ## Desarrollo
 
 ```bash
-# Terminal 1 — backend (opcional, habilita la persistencia y los planes del server)
-cd server && npm start          # API en http://localhost:3001
+# Terminal 1 — backend (necesita una MONGODB_URI: Atlas o Mongo local)
+cd server && MONGODB_URI="mongodb+srv://..." npm start   # API en http://localhost:3001
 
 # Terminal 2 — widget en modo dev
 npm run dev                     # http://localhost:1012
 ```
 
+## Despliegue del backend (Render + MongoDB Atlas)
+
+El backend está pensado para vivir en la nube (así el widget funciona en sitios reales sin correr nada local y sin el bloqueo de loopback de Chrome):
+
+1. **MongoDB Atlas**: crea un cluster gratis (M0), un usuario de DB y permite el acceso desde `0.0.0.0/0`. Copia la *connection string*.
+2. **Render**: *New → Blueprint*, conecta este repo (usa el [`render.yaml`](render.yaml)). Define las env vars `MONGODB_URI`, `JWT_SECRET`, `NODE_ENV=production`.
+3. Toma la URL pública resultante (`https://<app>.onrender.com`).
+
 ## Build de la extensión
 
 ```bash
-npm run build                   # genera build/chrome-mv3-prod/
+# Apuntando al backend en la nube:
+PLASMO_PUBLIC_API_URL=https://<app>.onrender.com/api npm run build
+# (sin la variable, usa http://localhost:3001/api)
 ```
+
+Genera `build/chrome-mv3-prod/`. Ver [`.env.example`](.env.example).
 
 ## Cargar la extensión en Chrome
 
@@ -114,13 +151,15 @@ npm run build                   # genera build/chrome-mv3-prod/
 
 Tras cada cambio: `npm run build` y recarga la extensión con el botón ↻ en `chrome://extensions`.
 
-> **Tip de demo:** el código OTP de inicio de sesión acepta **cualquier combinación de 6 dígitos**. Con el backend activo, el endpoint `send-otp` devuelve el código en `devCode`.
+> **Login de demo:** usa cualquiera de las [cuentas de demo](#cuentas-de-demo) (ej. `ana` / `kueski123`).
 
 ## Tests
 
 ```bash
-npm test                        # 140 pruebas (frontend + backend) con Vitest
+npm test                        # 143 pruebas (frontend + backend) con Vitest
 ```
+
+Incluye pruebas de integración del backend con **MongoDB en memoria** (`mongodb-memory-server`) y escenarios de **rechazo de compra** (`test/eligibility.test.ts`).
 
 ## Landing page
 
@@ -138,9 +177,10 @@ Página estática en [`landing/index.html`](landing/index.html). Ábrela con dob
 │   ├── hooks/                # useAuth, useScore, useCart
 │   ├── utils/                # api.ts, storage.ts, payments.ts, priceDetector.ts
 │   └── constants/kueski.ts   # reglas de negocio (espejo de server/lib/rules.js)
-├── server/               # backend Express + JSON DB
-│   ├── server.js             # 19 endpoints REST
-│   └── lib/                  # rules.js (motor) + jwt.js (auth)
+├── server/               # backend Express + MongoDB
+│   ├── server.js             # API REST multiusuario
+│   └── lib/                  # db.js (Mongoose) · seed.js · rules.js · jwt.js
+├── render.yaml           # blueprint de despliegue en Render
 ├── landing/index.html    # landing page estática
 ├── test/                 # pruebas Vitest (componentes, hooks, api, server)
 └── docs/                 # contexto, endpoints, pruebas, indicaciones

@@ -1,0 +1,27 @@
+# Blueprint de Render para el backend del Kueski Smart Widget.
+# Crea un Web Service de Node a partir de la carpeta server/.
+#
+# Pasos:
+#   1. En Render → New → Blueprint → conecta este repo.
+#   2. Render lee este archivo y crea el servicio.
+#   3. Define MONGODB_URI con tu connection string de MongoDB Atlas.
+#
+# La URL pública resultante (https://<nombre>.onrender.com) se usa como
+# PLASMO_PUBLIC_API_URL al hacer el build de la extensión:
+#   PLASMO_PUBLIC_API_URL=https://<nombre>.onrender.com/api npm run build
+services:
+  - type: web
+    name: kueski-widget-api
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: MONGODB_URI
+        sync: false           # se define manualmente en el dashboard (secreto)
+      - key: JWT_SECRET
+        generateValue: true   # Render genera un secreto seguro
+      - key: NODE_ENV
+        value: production

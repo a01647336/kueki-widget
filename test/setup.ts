@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom';
 import { beforeEach, vi } from 'vitest';
+import { webcrypto } from 'node:crypto';
 import { storage } from '../src/utils/storage';
 
 // Mock localStorage
@@ -25,9 +26,15 @@ beforeEach(() => {
   global.fetch = vi.fn(() => Promise.reject(new Error('offline'))) as unknown as typeof fetch;
 });
 
-// Mock crypto.randomUUID
+// Mock crypto.randomUUID PRESERVANDO getRandomValues/subtle reales
+// (el driver de MongoDB usa getRandomValues; los tests usan randomUUID).
 Object.defineProperty(globalThis, 'crypto', {
-  value: { randomUUID: () => 'test-uuid-' + Math.random().toString(36).slice(2) },
+  configurable: true,
+  value: {
+    randomUUID: () => 'test-uuid-' + Math.random().toString(36).slice(2),
+    getRandomValues: (arr: Parameters<typeof webcrypto.getRandomValues>[0]) => webcrypto.getRandomValues(arr),
+    subtle: webcrypto.subtle,
+  },
 });
 
 // Silence motion/react animation warnings in tests

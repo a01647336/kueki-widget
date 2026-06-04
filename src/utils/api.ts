@@ -13,8 +13,10 @@
 
 import type { Purchase, LevelName } from '../types';
 
-const BASE_URL = 'http://localhost:3001/api';
-const TIMEOUT  = 3000; // ms — no bloquear si el server no está corriendo
+// Configurable por entorno de Plasmo (PLASMO_PUBLIC_API_URL). En producción
+// apunta a la URL pública de Render; en dev cae a localhost.
+const BASE_URL = process.env.PLASMO_PUBLIC_API_URL ?? 'http://localhost:3001/api';
+const TIMEOUT  = 8000; // ms — margen para el cold start del server en la nube
 const TOKEN_KEY = 'kueski_token';
 
 // ─── Manejo de token de sesión ───────────────────────────────────────────────
@@ -63,6 +65,29 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T |
   }
 }
 
+/** Variante que conserva el status HTTP (para distinguir 401 de "sin servidor"). */
+async function apiFetchRaw<T>(
+  path: string,
+  options: RequestInit = {}
+): Promise<{ ok: boolean; status: number; data: T | null }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT);
+  try {
+    const headers: Record<string, string> = {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...(options.headers as Record<string, string>),
+    };
+    const res = await fetch(`${BASE_URL}${path}`, { ...options, headers, signal: controller.signal });
+    const data = res.ok ? ((await res.json()) as T) : null;
+    return { ok: res.ok, status: res.status, data };
+  } catch {
+    return { ok: false, status: 0, data: null }; // status 0 = servidor no disponible
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 const body = (data: unknown) => JSON.stringify(data);
 
 // ─── Tipos de respuesta ──────────────────────────────────────────────────────
@@ -70,6 +95,7 @@ const body = (data: unknown) => JSON.stringify(data);
 export interface ApiUser {
   id: string;
   name: string;
+  username?: string;
   email: string;
   level: LevelName;
   creditLimit: number;
@@ -101,6 +127,8 @@ export interface ApiPlan {
 
 export interface ApiPlansResponse {
   approved: boolean;
+  reason: string | null;
+  message: string | null;
   availableCredit: number;
   plans: ApiPlan[];
 }
@@ -125,22 +153,29 @@ export interface CashbackHistory {
 
 // ─── 1. Autenticación ─────────────────────────────────────────────────────────
 
-/** Solicita el envío de un código OTP. Devuelve `devCode` en modo demo. */
-export async function sendOtp(identifier: string): Promise<{ ok: boolean; expiresIn: number; devCode?: string } | null> {
-  return apiFetch('/auth/send-otp', { method: 'POST', body: body({ identifier }) });
+export interface LoginResult {
+  ok: boolean;
+  user: ApiUser | null;
+  /** true si el servidor respondió pero rechazó las credenciales (401). */
+  invalidCredentials: boolean;
 }
 
-/** Verifica el código OTP. Si es válido guarda el token y devuelve el perfil. */
-export async function verifyOtp(identifier: string, code: string): Promise<ApiUser | null> {
-  const res = await apiFetch<{ accessToken: string; refreshToken: string; user: ApiUser }>(
-    '/auth/verify-otp',
-    { method: 'POST', body: body({ identifier, code }) }
+/**
+ * Inicia sesión con usuario + contraseña. Si es válido guarda el token y
+ * devuelve el perfil. Distingue entre "credenciales inválidas" (servidor
+ * respondió 401) y "servidor no disponible" para que la UI muestre el mensaje
+ * correcto.
+ */
+export async function login(username: string, password: string): Promise<LoginResult> {
+  const res = await apiFetchRaw<{ accessToken: string; refreshToken: string; user: ApiUser }>(
+    '/auth/login',
+    { method: 'POST', body: body({ username, password }) }
   );
-  if (res?.accessToken) {
-    setToken(res.accessToken);
-    return res.user;
+  if (res.ok && res.data?.accessToken) {
+    setToken(res.data.accessToken);
+    return { ok: true, user: res.data.user, invalidCredentials: false };
   }
-  return null;
+  return { ok: false, user: null, invalidCredentials: res.status === 401 };
 }
 
 /** Cierra la sesión en el servidor y limpia el token local. */

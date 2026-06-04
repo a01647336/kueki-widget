@@ -63,11 +63,25 @@ export function useScore() {
     setState(fresh);
   }, []);
 
+  /** Hidrata el score con los datos del backend tras iniciar sesión. */
+  const setFromServer = useCallback(
+    (server: { points: number; level: LevelName; achievements?: Achievement[] }) => {
+      const next: ScoreState = {
+        points: server.points,
+        level: server.level,
+        achievements: server.achievements ?? DEFAULT_ACHIEVEMENTS,
+      };
+      storage.setScore(next);
+      setState(next);
+    },
+    []
+  );
+
   const nextLevelThreshold = (): number => {
     const currentIdx = LEVEL_ORDER.indexOf(state.level);
     const nextLevel = LEVEL_ORDER[currentIdx + 1];
     return nextLevel ? LEVEL_THRESHOLDS[nextLevel] : LEVEL_THRESHOLDS.Platino;
   };
 
-  return { ...state, addPoints, completeAchievement, reset, nextLevelThreshold };
+  return { ...state, addPoints, completeAchievement, reset, setFromServer, nextLevelThreshold };
 }

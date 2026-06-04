@@ -19,3 +19,4 @@ dist/
 # Logs
 *.log
 npm-debug.log*
+server/kueski_db.json

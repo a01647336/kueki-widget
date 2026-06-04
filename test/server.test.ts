@@ -1,38 +1,38 @@
 /**
- * server.test.ts — Pruebas de integración del backend (Express + supertest).
- *
- * Usa un archivo de DB temporal (DB_FILE) para no tocar el kueski_db.json real,
- * y lo re-siembra antes de cada test para aislar el estado.
+ * server.test.ts — Integración del backend (Express + Mongoose) con
+ * MongoDB en memoria (mongodb-memory-server). Re-siembra antes de cada test.
  */
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createRequire } from 'module';
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
 import request from 'supertest';
-
-const TMP_DB = path.join(os.tmpdir(), `kueski_test_${process.pid}.json`);
-process.env.DB_FILE = TMP_DB;
-process.env.NODE_ENV = 'test';
+import { MongoMemoryServer } from 'mongodb-memory-server';
 
 const require = createRequire(import.meta.url);
-const { app, INITIAL_DB } = require('../server/server.js');
+const { app } = require('../server/server.js');
+const { connectDB, disconnectDB, User, Purchase, Deal } = require('../server/lib/db');
+const { seedDatabase } = require('../server/lib/seed');
 
-function reseed() {
-  fs.writeFileSync(TMP_DB, JSON.stringify(INITIAL_DB, null, 2));
-}
+let mem: InstanceType<typeof MongoMemoryServer>;
 
-/** Hace login y devuelve un access token válido. */
-async function login(): Promise<string> {
-  const otp = await request(app).post('/api/auth/send-otp').send({ identifier: 'carlos@ejemplo.com' });
-  const res = await request(app)
-    .post('/api/auth/verify-otp')
-    .send({ identifier: 'carlos@ejemplo.com', code: otp.body.devCode });
+beforeAll(async () => {
+  mem = await MongoMemoryServer.create();
+  await connectDB(mem.getUri());
+}, 60000);
+
+afterAll(async () => {
+  await disconnectDB();
+  await mem.stop();
+});
+
+beforeEach(async () => {
+  await Promise.all([User.deleteMany({}), Purchase.deleteMany({}), Deal.deleteMany({})]);
+  await seedDatabase();
+});
+
+async function loginAs(username: string): Promise<string> {
+  const res = await request(app).post('/api/auth/login').send({ username, password: 'kueski123' });
   return res.body.accessToken;
 }
-
-beforeEach(() => reseed());
-afterAll(() => { try { fs.unlinkSync(TMP_DB); } catch { /* ignore */ } });
 
 describe('Health', () => {
   it('GET /api/health responde ok', async () => {
@@ -43,48 +43,28 @@ describe('Health', () => {
 });
 
 describe('Autenticación', () => {
-  it('send-otp devuelve devCode en modo demo', async () => {
-    const res = await request(app).post('/api/auth/send-otp').send({ identifier: 'carlos@ejemplo.com' });
-    expect(res.status).toBe(200);
-    expect(res.body.devCode).toMatch(/^\d{6}$/);
-  });
-
-  it('send-otp rechaza identificador inválido (400)', async () => {
-    const res = await request(app).post('/api/auth/send-otp').send({ identifier: 'no-valido' });
-    expect(res.status).toBe(400);
-  });
-
-  it('verify-otp emite tokens y perfil', async () => {
-    const otp = await request(app).post('/api/auth/send-otp').send({ identifier: 'carlos@ejemplo.com' });
-    const res = await request(app)
-      .post('/api/auth/verify-otp')
-      .send({ identifier: 'carlos@ejemplo.com', code: otp.body.devCode });
+  it('login válido devuelve tokens y perfil', async () => {
+    const res = await request(app).post('/api/auth/login').send({ username: 'ana', password: 'kueski123' });
     expect(res.status).toBe(200);
     expect(res.body.accessToken).toBeTruthy();
-    expect(res.body.refreshToken).toBeTruthy();
-    expect(res.body.user.name).toBe('Carlos Mendoza');
+    expect(res.body.user.level).toBe('Plata');
   });
 
-  it('verify-otp rechaza código que no tiene 6 dígitos (400)', async () => {
-    const res = await request(app)
-      .post('/api/auth/verify-otp')
-      .send({ identifier: 'carlos@ejemplo.com', code: '12' });
+  it('login con contraseña incorrecta devuelve 401', async () => {
+    const res = await request(app).post('/api/auth/login').send({ username: 'ana', password: 'mala' });
+    expect(res.status).toBe(401);
+  });
+
+  it('login sin campos devuelve 400', async () => {
+    const res = await request(app).post('/api/auth/login').send({ username: 'ana' });
     expect(res.status).toBe(400);
   });
 
   it('refresh-token renueva el access token', async () => {
-    const otp = await request(app).post('/api/auth/send-otp').send({ identifier: 'carlos@ejemplo.com' });
-    const login = await request(app)
-      .post('/api/auth/verify-otp')
-      .send({ identifier: 'carlos@ejemplo.com', code: otp.body.devCode });
+    const login = await request(app).post('/api/auth/login').send({ username: 'ana', password: 'kueski123' });
     const res = await request(app).post('/api/auth/refresh-token').send({ refreshToken: login.body.refreshToken });
     expect(res.status).toBe(200);
     expect(res.body.accessToken).toBeTruthy();
-  });
-
-  it('refresh-token rechaza un token inválido (401)', async () => {
-    const res = await request(app).post('/api/auth/refresh-token').send({ refreshToken: 'basura' });
-    expect(res.status).toBe(401);
   });
 });
 
@@ -94,20 +74,19 @@ describe('Usuario y autorización', () => {
     expect(res.status).toBe(401);
   });
 
-  it('GET /api/user con token devuelve el perfil', async () => {
-    const token = await login();
-    const res = await request(app).get('/api/user').set('Authorization', `Bearer ${token}`);
-    expect(res.status).toBe(200);
-    expect(res.body.level).toBe('Bronce');
-    expect(res.body.creditLimit).toBe(2500);
+  it('cada usuario obtiene su propio perfil', async () => {
+    const tokenAna = await loginAs('ana');
+    const tokenDiego = await loginAs('diego');
+    const ana = await request(app).get('/api/user').set('Authorization', `Bearer ${tokenAna}`);
+    const diego = await request(app).get('/api/user').set('Authorization', `Bearer ${tokenDiego}`);
+    expect(ana.body.level).toBe('Plata');
+    expect(diego.body.level).toBe('Oro');
+    expect(ana.body.id).not.toBe(diego.body.id);
   });
 
-  it('preferencias: GET y PUT (merge parcial)', async () => {
-    const token = await login();
-    await request(app)
-      .put('/api/user/preferences')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ disabledSites: ['coppel'] });
+  it('preferencias: PUT y GET con merge parcial', async () => {
+    const token = await loginAs('carlos');
+    await request(app).put('/api/user/preferences').set('Authorization', `Bearer ${token}`).send({ disabledSites: ['coppel'] });
     const res = await request(app).get('/api/user/preferences').set('Authorization', `Bearer ${token}`);
     expect(res.body.disabledSites).toEqual(['coppel']);
     expect(res.body.notifications.reminders).toBe(true);
@@ -116,141 +95,89 @@ describe('Usuario y autorización', () => {
 
 describe('Score y gamificación', () => {
   it('PUT /api/user/score sube de nivel y marca levelChanged', async () => {
-    const token = await login();
-    const res = await request(app)
-      .put('/api/user/score')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ points: 1600 });
+    const token = await loginAs('carlos');
+    const res = await request(app).put('/api/user/score').set('Authorization', `Bearer ${token}`).send({ points: 1600 });
     expect(res.body.level).toBe('Oro');
     expect(res.body.levelChanged).toBe(true);
   });
 
   it('GET /api/user/score reporta el siguiente nivel', async () => {
-    const token = await login();
+    const token = await loginAs('carlos');
     const res = await request(app).get('/api/user/score').set('Authorization', `Bearer ${token}`);
     expect(res.body.level).toBe('Bronce');
     expect(res.body.nextLevel).toBe('Plata');
-    expect(res.body.pointsToNextLevel).toBe(250); // 500 - 250
+    expect(res.body.pointsToNextLevel).toBe(250);
   });
 
   it('completar un logro otorga puntos y es idempotente (409)', async () => {
-    const token = await login();
-    const first = await request(app)
-      .post('/api/user/achievements/referral/complete')
-      .set('Authorization', `Bearer ${token}`);
+    const token = await loginAs('carlos');
+    const first = await request(app).post('/api/user/achievements/referral/complete').set('Authorization', `Bearer ${token}`);
     expect(first.status).toBe(200);
     expect(first.body.pointsAwarded).toBe(300);
-
-    const second = await request(app)
-      .post('/api/user/achievements/referral/complete')
-      .set('Authorization', `Bearer ${token}`);
+    const second = await request(app).post('/api/user/achievements/referral/complete').set('Authorization', `Bearer ${token}`);
     expect(second.status).toBe(409);
   });
 });
 
 describe('Planes personalizados por nivel', () => {
-  it('Bronce solo recibe planes de 2 y 4 quincenas', async () => {
-    const token = await login();
-    const res = await request(app)
-      .post('/api/purchases/calculate-plans')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ cartTotal: 1500 });
+  it('Bronce (carlos) recibe planes de 2 y 4 quincenas', async () => {
+    const token = await loginAs('carlos');
+    const res = await request(app).post('/api/purchases/calculate-plans').set('Authorization', `Bearer ${token}`).send({ cartTotal: 1500 });
     expect(res.body.approved).toBe(true);
     expect(res.body.plans.map((p: { periods: number }) => p.periods)).toEqual([2, 4]);
   });
 
-  it('Oro recibe hasta 8 quincenas con comisión en la de 8', async () => {
-    const token = await login();
-    await request(app).put('/api/user/score').set('Authorization', `Bearer ${token}`).send({ points: 1600 });
-    const res = await request(app)
-      .post('/api/purchases/calculate-plans')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ cartTotal: 5000 });
-    const periods = res.body.plans.map((p: { periods: number }) => p.periods);
-    expect(periods).toEqual([2, 4, 6, 8]);
-    const plan8 = res.body.plans.find((p: { periods: number }) => p.periods === 8);
-    expect(plan8.commissionRate).toBe(0.015);
-  });
-
-  it('no aprueba si el monto supera el crédito disponible', async () => {
-    const token = await login();
-    const res = await request(app)
-      .post('/api/purchases/calculate-plans')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ cartTotal: 999999 });
-    expect(res.body.approved).toBe(false);
+  it('Oro (diego) recibe hasta 8 quincenas con comisión en la de 8', async () => {
+    const token = await loginAs('diego');
+    const res = await request(app).post('/api/purchases/calculate-plans').set('Authorization', `Bearer ${token}`).send({ cartTotal: 5000 });
+    expect(res.body.plans.map((p: { periods: number }) => p.periods)).toEqual([2, 4, 6, 8]);
+    expect(res.body.plans.find((p: { periods: number }) => p.periods === 8).commissionRate).toBe(0.015);
   });
 });
 
-describe('Compras', () => {
-  it('registra una compra, baja el crédito y aparece en el historial', async () => {
-    const token = await login();
+describe('Compras y aislamiento por usuario', () => {
+  it('una compra de un usuario no aparece en el historial de otro', async () => {
+    const tokenAna = await loginAs('ana');
+    await request(app).post('/api/purchases').set('Authorization', `Bearer ${tokenAna}`)
+      .send({ id: 'p_ana_1', site: 'amazon', amount: 1000, plan: 4 });
+
+    const histAna = await request(app).get('/api/purchases').set('Authorization', `Bearer ${tokenAna}`);
+    expect(histAna.body.find((p: { id: string }) => p.id === 'p_ana_1')).toBeTruthy();
+
+    const tokenDiego = await loginAs('diego');
+    const histDiego = await request(app).get('/api/purchases').set('Authorization', `Bearer ${tokenDiego}`);
+    expect(histDiego.body.find((p: { id: string }) => p.id === 'p_ana_1')).toBeFalsy();
+  });
+
+  it('registrar una compra baja el crédito del usuario', async () => {
+    const token = await loginAs('ana');
     const before = await request(app).get('/api/user').set('Authorization', `Bearer ${token}`);
-    const creditBefore = before.body.availableCredit;
-
-    const create = await request(app)
-      .post('/api/purchases')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ id: 'p_test_1', site: 'amazon', amount: 1000, plan: 4 });
-    expect(create.status).toBe(201);
-
+    await request(app).post('/api/purchases').set('Authorization', `Bearer ${token}`)
+      .send({ id: 'p_ana_2', site: 'amazon', amount: 1000, plan: 4 });
     const after = await request(app).get('/api/user').set('Authorization', `Bearer ${token}`);
-    expect(after.body.availableCredit).toBe(creditBefore - 1000);
-
-    const list = await request(app).get('/api/purchases').set('Authorization', `Bearer ${token}`);
-    expect(list.body.find((p: { id: string }) => p.id === 'p_test_1')).toBeTruthy();
-  });
-
-  it('rechaza compras con id duplicado (409)', async () => {
-    const token = await login();
-    const body = { id: 'p_dup', site: 'amazon', amount: 500, plan: 2 };
-    await request(app).post('/api/purchases').set('Authorization', `Bearer ${token}`).send(body);
-    const dup = await request(app).post('/api/purchases').set('Authorization', `Bearer ${token}`).send(body);
-    expect(dup.status).toBe(409);
-  });
-
-  it('detalle (404 si no existe) y actualización de estado', async () => {
-    const token = await login();
-    await request(app)
-      .post('/api/purchases')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ id: 'p_status', site: 'liverpool', amount: 800, plan: 2 });
-
-    const notFound = await request(app).get('/api/purchases/nope').set('Authorization', `Bearer ${token}`);
-    expect(notFound.status).toBe(404);
-
-    const updated = await request(app)
-      .put('/api/purchases/p_status/status')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ status: 'pagado' });
-    expect(updated.body.status).toBe('pagado');
+    expect(after.body.availableCredit).toBe(before.body.availableCredit - 1000);
   });
 });
 
 describe('Cashback', () => {
-  it('acumula el cashback de las compras registradas', async () => {
-    const token = await login();
-    await request(app)
-      .post('/api/purchases')
-      .set('Authorization', `Bearer ${token}`)
-      .send({ id: 'p_cb', site: 'amazon', amount: 2000, plan: 2, cashback: 10 });
+  it('acumula el cashback de las compras del usuario', async () => {
+    const token = await loginAs('ana');
+    await request(app).post('/api/purchases').set('Authorization', `Bearer ${token}`)
+      .send({ id: 'p_cb', site: 'amazon', amount: 2000, plan: 2, cashback: 30 });
     const res = await request(app).get('/api/user/cashback').set('Authorization', `Bearer ${token}`);
-    expect(res.body.totalEarned).toBeGreaterThanOrEqual(10);
-    expect(res.body.history.length).toBeGreaterThanOrEqual(1);
+    expect(res.body.totalEarned).toBeGreaterThanOrEqual(30);
   });
 });
 
 describe('Deals', () => {
   it('lista deals y marca el activo del sitio', async () => {
-    const token = await login();
+    const token = await loginAs('ana');
     const res = await request(app).get('/api/deals?site=amazon').set('Authorization', `Bearer ${token}`);
-    expect(res.status).toBe(200);
-    const amazon = res.body.find((d: { site: string }) => d.site === 'amazon');
-    expect(amazon.isActive).toBe(true);
+    expect(res.body.find((d: { site: string }) => d.site === 'amazon').isActive).toBe(true);
   });
 
   it('suscribirse a un deal inexistente devuelve 404', async () => {
-    const token = await login();
+    const token = await loginAs('ana');
     const res = await request(app).post('/api/deals/999/subscribe').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(404);
   });

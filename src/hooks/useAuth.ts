@@ -1,22 +1,25 @@
 import { useState, useCallback } from 'react';
 import type { User } from '../types';
 import { storage } from '../utils/storage';
-import { POINTS, LEVEL_CASHBACK_RATES, LEVEL_CREDIT_LIMITS } from '../constants/kueski';
-import { logout as apiLogout } from '../utils/api';
-
-const MOCK_USER: Omit<User, 'email'> = {
-  name: 'Carlos Mendoza',
-  level: 'Bronce',
-  creditLimit: LEVEL_CREDIT_LIMITS.Bronce.max,
-  availableCredit: 1950,
-  cashbackRate: LEVEL_CASHBACK_RATES.Bronce,
-  nextPayment: { date: '2026-06-01', amount: 649.50 },
-  score: 250,
-};
+import { logout as apiLogout, type ApiUser } from '../utils/api';
 
 export interface AuthState {
   isLoggedIn: boolean;
   user: User | null;
+}
+
+/** Mapea el perfil del backend al tipo local `User`. */
+function toUser(api: ApiUser): User {
+  return {
+    name: api.name,
+    email: api.email ?? api.username,
+    level: api.level,
+    creditLimit: api.creditLimit,
+    availableCredit: api.availableCredit,
+    cashbackRate: api.cashbackRate,
+    nextPayment: api.nextPayment,
+    score: api.score,
+  };
 }
 
 export function useAuth() {
@@ -25,17 +28,9 @@ export function useAuth() {
     return saved ?? { isLoggedIn: false, user: null };
   });
 
-  const login = useCallback((email: string) => {
-    const user: User = { ...MOCK_USER, email };
-    const scoreState = storage.getScore();
-    const initialPoints = scoreState ? scoreState.points : POINTS.WELCOME;
-    if (!scoreState) {
-      storage.setScore({
-        points: initialPoints,
-        level: 'Bronce',
-        achievements: defaultAchievements(),
-      });
-    }
+  /** Recibe el perfil real del backend (devuelto por `api.login`). */
+  const login = useCallback((apiUser: ApiUser) => {
+    const user = toUser(apiUser);
     const newState: AuthState = { isLoggedIn: true, user };
     storage.setAuth(newState);
     setState(newState);
@@ -43,18 +38,10 @@ export function useAuth() {
 
   const logout = useCallback(() => {
     storage.clearAuth();
+    storage.clearScore();
     void apiLogout(); // invalida la sesión en el server y limpia el token local
     setState({ isLoggedIn: false, user: null });
   }, []);
 
   return { ...state, login, logout };
-}
-
-function defaultAchievements() {
-  return [
-    { id: 'first-payment',   title: 'Primer pago a tiempo',      completed: false, points: POINTS.ON_TIME_PAYMENT },
-    { id: 'three-purchases', title: 'Usa Kueski Pay 3 veces',    completed: false, points: POINTS.PURCHASE * 3 },
-    { id: 'thirty-days',     title: 'Mantén buen historial 30 días', completed: false, points: POINTS.THIRTY_DAY_STREAK },
-    { id: 'referral',        title: 'Invita a un amigo',         completed: false, points: POINTS.REFERRAL },
-  ];
 }

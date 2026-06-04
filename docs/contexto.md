@@ -28,15 +28,15 @@ src/contents/kueski.tsx   → content script: detecta el sitio, monta el widget 
 
 ## Módulos del sistema
 
-### 1. Autenticación 2FA (con JWT del backend)
+### 1. Autenticación usuario/contraseña (multiusuario)
 
-Flujo en 2 pasos:
-1. **Identificación**: email o teléfono de 10 dígitos. Dispara `POST /api/auth/send-otp`.
-2. **Verificación**: 6 dígitos en inputs con auto-focus. Dispara `POST /api/auth/verify-otp`, que devuelve un **access token JWT** + perfil. El token se guarda y se adjunta como `Authorization: Bearer` en las llamadas siguientes.
+Login real contra el backend: `POST /api/auth/login` con `{ username, password }`. El servidor valida la contraseña con **bcrypt** y emite un **access token JWT** (`sub = userId`) + el perfil del usuario. El token se guarda (`kueski_token`) y se adjunta como `Authorization: Bearer` en cada llamada protegida.
 
-En el demo, cualquier código de 6 dígitos es válido. Sin backend, el login cae al usuario simulado local. La sesión se persiste en `kueski_auth` y el token en `kueski_token`. Al iniciar sesión por primera vez se otorgan +200 puntos de bienvenida.
+**Multiusuario:** hay un set de cuentas predefinidas (sembradas en MongoDB), cada una con **su propio perfil, score, nivel, crédito, compras y cashback**. Al iniciar sesión, el widget **hidrata** el score y el historial de ese usuario desde el backend, de modo que cada quien ve su propia información (ya no hay un usuario hardcodeado).
 
-Usuario simulado: **Carlos Mendoza · Bronce · $1,950 / $2,500 MXN · próximo pago 1 jun 2026**.
+Cuentas de demo (password `kueski123`): `carlos` (Bronce), `ana` (Plata), `diego` (Oro), `sofia` (Platino), `pedro` (Plata, con un pago vencido). Un enlace **"Regístrate en Kueski"** abre el sitio de Kueski.
+
+La sesión se persiste en `kueski_auth`/`kueski_token`; al cerrar sesión se limpian auth, token, score e historial para no mezclar usuarios.
 
 ### 2. Carrito por detección de precios
 
@@ -46,9 +46,9 @@ Usuario simulado: **Carlos Mendoza · Bronce · $1,950 / $2,500 MXN · próximo 
 
 Detecta el sitio actual y actúa según el estado (sin sesión → CTA de login; con sesión y carrito → botón "Simular pago $X"). En sitios no compatibles muestra un mensaje de espera no intrusivo.
 
-### 4. Simulación de pagos (personalizada)
+### 4. Simulación de pagos (personalizada + elegibilidad)
 
-Pide los planes al backend con `POST /api/purchases/calculate-plans`, que los calcula **según el nivel y el crédito disponible** del usuario. Sin backend, usa el motor local (`utils/payments.ts`), que comparte exactamente las mismas reglas. Muestra un aviso si el monto supera el crédito disponible. Al confirmar: +50 puntos y registro en el historial con cashback calculado.
+Pide los planes al backend con `POST /api/purchases/calculate-plans`, que los calcula **según el nivel y el crédito disponible** del usuario y evalúa la **elegibilidad** (motor `evaluateEligibility`): rechaza por `MONTO_INVALIDO`, `MORA`, `LIMITE_COMPRAS_ACTIVAS` o `CREDITO_INSUFICIENTE`. Cuando no es aprobable, el simulador muestra el motivo y **deshabilita el botón de confirmar**. Sin backend, usa el motor local (`utils/payments.ts`) con las mismas reglas de planes. Al confirmar: +50 puntos y registro en el historial con cashback calculado.
 
 ### 5. Score Coach — gamificación
 
@@ -92,9 +92,9 @@ Fuente única de verdad: `src/constants/kueski.ts` (frontend) y `server/lib/rule
 | Animaciones | Framer Motion (`motion/react`) |
 | Íconos | Lucide React |
 | Persistencia local | `@plasmohq/storage` (chrome.storage.local) + localStorage |
-| Backend | Express.js + base de datos JSON en archivo |
-| Auth backend | JWT simulado HS256 (`crypto` nativo) |
-| Pruebas | Vitest + Testing Library + Supertest |
+| Backend | Express.js + **MongoDB** (Mongoose), desplegado en Render |
+| Auth backend | usuario/contraseña (**bcrypt**) → JWT HS256 (`crypto` nativo) |
+| Pruebas | Vitest + Testing Library + Supertest + mongodb-memory-server |
 
 ---
 
@@ -125,10 +125,11 @@ src/
 └── types/index.ts              — interfaces TypeScript
 
 server/
-├── server.js                   — 19 endpoints REST
-├── lib/rules.js                — motor score/nivel/planes/cashback
-├── lib/jwt.js                  — firma/verificación JWT + authMiddleware
-└── kueski_db.json              — base de datos
+├── server.js                   — API REST multiusuario
+├── lib/db.js                   — conexión y modelos Mongoose (User/Purchase/Deal)
+├── lib/seed.js                 — usuarios y deals de demo
+├── lib/rules.js                — score/nivel/planes/cashback + elegibilidad
+└── lib/jwt.js                  — firma/verificación JWT + authMiddleware
 ```
 
 ---

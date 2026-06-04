@@ -1,20 +1,20 @@
 /**
  * api.test.ts — Cliente HTTP del frontend (src/utils/api.ts) con fetch mockeado.
- * Verifica el manejo del token, la cabecera Authorization y el fallback
- * silencioso a null cuando el backend no responde.
+ * Verifica el manejo del token, la cabecera Authorization, el login y el
+ * fallback silencioso cuando el backend no responde.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   setToken,
   getToken,
-  verifyOtp,
+  login,
   fetchUser,
   calculatePlans,
   savePurchase,
 } from '../src/utils/api';
 
-function mockOk(data: unknown) {
-  global.fetch = vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve(data) } as Response));
+function mockJson(data: unknown, ok = true, status = 200) {
+  global.fetch = vi.fn(() => Promise.resolve({ ok, status, json: () => Promise.resolve(data) } as Response));
 }
 
 function mockFail() {
@@ -41,33 +41,42 @@ describe('Manejo de token', () => {
   });
 });
 
-describe('verifyOtp', () => {
+describe('login', () => {
   it('guarda el access token y devuelve el perfil', async () => {
-    mockOk({ accessToken: 'tok-123', refreshToken: 'ref-456', user: { name: 'Carlos', level: 'Bronce' } });
-    const user = await verifyOtp('carlos@ejemplo.com', '123456');
-    expect(user?.name).toBe('Carlos');
+    mockJson({ accessToken: 'tok-123', refreshToken: 'ref-456', user: { name: 'Ana', level: 'Plata' } });
+    const res = await login('ana', 'kueski123');
+    expect(res.ok).toBe(true);
+    expect(res.user?.name).toBe('Ana');
     expect(getToken()).toBe('tok-123');
   });
 
-  it('devuelve null si el servidor no responde (fallback offline)', async () => {
-    mockFail();
-    const user = await verifyOtp('carlos@ejemplo.com', '123456');
-    expect(user).toBeNull();
+  it('marca invalidCredentials cuando el server responde 401', async () => {
+    mockJson(null, false, 401);
+    const res = await login('ana', 'mala');
+    expect(res.ok).toBe(false);
+    expect(res.invalidCredentials).toBe(true);
     expect(getToken()).toBeNull();
+  });
+
+  it('no marca invalidCredentials si el servidor no responde (offline)', async () => {
+    mockFail();
+    const res = await login('ana', 'kueski123');
+    expect(res.ok).toBe(false);
+    expect(res.invalidCredentials).toBe(false);
   });
 });
 
 describe('Cabecera de autorización', () => {
   it('adjunta Authorization: Bearer cuando hay token', async () => {
     setToken('mi-token');
-    mockOk({ id: 'u_001', name: 'Carlos' });
+    mockJson({ id: 'u_001', name: 'Carlos' });
     await fetchUser();
     const headers = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].headers;
     expect(headers.Authorization).toBe('Bearer mi-token');
   });
 
   it('no adjunta Authorization cuando no hay token', async () => {
-    mockOk({ id: 'u_001' });
+    mockJson({ id: 'u_001' });
     await fetchUser();
     const headers = (global.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1].headers;
     expect(headers.Authorization).toBeUndefined();
@@ -81,7 +90,7 @@ describe('Fallback silencioso', () => {
   });
 
   it('fetchUser devuelve null si la respuesta no es ok', async () => {
-    global.fetch = vi.fn(() => Promise.resolve({ ok: false, json: () => Promise.resolve({}) } as Response));
+    mockJson({}, false, 500);
     expect(await fetchUser()).toBeNull();
   });
 
@@ -94,10 +103,10 @@ describe('Fallback silencioso', () => {
 });
 
 describe('calculatePlans', () => {
-  it('devuelve los planes personalizados del backend', async () => {
-    mockOk({ approved: true, availableCredit: 1950, plans: [{ periods: 2 }, { periods: 4 }] });
+  it('devuelve los planes y la elegibilidad del backend', async () => {
+    mockJson({ approved: false, reason: 'MORA', message: 'Tienes un pago vencido.', availableCredit: 5000, plans: [{ periods: 2 }] });
     const res = await calculatePlans(1500);
-    expect(res?.approved).toBe(true);
-    expect(res?.plans).toHaveLength(2);
+    expect(res?.approved).toBe(false);
+    expect(res?.reason).toBe('MORA');
   });
 });

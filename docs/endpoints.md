@@ -2,15 +2,14 @@
 
 Documentación de todos los endpoints REST que requiere la versión funcional final del widget.
 
-**Base URL:** `http://localhost:3001`  
+**Base URL:** `http://localhost:3001` (local) · `https://<app>.onrender.com` (producción)  
 **Prefijo:** `/api`  
 **Formato:** JSON  
-**Autenticación:** Bearer JWT en el header `Authorization` (excepto endpoints de auth y health)
+**Autenticación:** Bearer JWT en el header `Authorization` (excepto `login`, `refresh-token` y `health`)
 
-> **Leyenda de estado:**
-> - ✅ Implementado — existe en `server/server.js`
-> - 🔶 Parcial — existe pero con lógica simplificada o sin auth
-> - ❌ Pendiente — actualmente mockeado en frontend/localStorage
+> **Multiusuario:** todos los endpoints de usuario operan sobre la cuenta del JWT (`req.userId`). Cada usuario ve y modifica únicamente **su** perfil, score, compras y cashback.
+>
+> Backend: **Express + MongoDB (Mongoose)**. Auth: **usuario/contraseña → JWT** (bcrypt + HS256).
 
 ---
 
@@ -28,67 +27,26 @@ Documentación de todos los endpoints REST que requiere la versión funcional fi
 
 ## 1. Autenticación
 
-### 1.1 Enviar código OTP ✅
+### 1.1 Iniciar sesión ✅
 
 ```
-POST /api/auth/send-otp
+POST /api/auth/login
 ```
 
-Envía un código de verificación de 6 dígitos al email o teléfono del usuario.
+Valida usuario y contraseña (bcrypt). Si son correctos, devuelve el perfil y los tokens de sesión.
 
 **Request body:**
 ```json
 {
-  "identifier": "ejemplo@correo.com"
+  "username": "ana",
+  "password": "kueski123"
 }
 ```
 
 | Campo | Tipo | Requerido | Descripción |
 |-------|------|-----------|-------------|
-| `identifier` | `string` | ✓ | Email válido o teléfono de 10 dígitos |
-
-**Response `200 OK`:**
-```json
-{
-  "ok": true,
-  "expiresIn": 300
-}
-```
-
-| Campo | Tipo | Descripción |
-|-------|------|-------------|
-| `ok` | `boolean` | Indica que el código fue enviado |
-| `expiresIn` | `number` | Segundos hasta que expira el código (300 = 5 min) |
-
-**Errores:**
-
-| Código | Descripción |
-|--------|-------------|
-| `400` | Identificador con formato inválido |
-| `429` | Demasiadas solicitudes — esperar antes de reintentar |
-
----
-
-### 1.2 Verificar código OTP ✅
-
-```
-POST /api/auth/verify-otp
-```
-
-Valida el código ingresado por el usuario. Si es correcto, devuelve el perfil del usuario y tokens de sesión.
-
-**Request body:**
-```json
-{
-  "identifier": "ejemplo@correo.com",
-  "code": "483921"
-}
-```
-
-| Campo | Tipo | Requerido | Descripción |
-|-------|------|-----------|-------------|
-| `identifier` | `string` | ✓ | El mismo email/teléfono del paso anterior |
-| `code` | `string` | ✓ | Código de 6 dígitos recibido |
+| `username` | `string` | ✓ | Usuario de la cuenta |
+| `password` | `string` | ✓ | Contraseña |
 
 **Response `200 OK`:**
 ```json
@@ -96,18 +54,16 @@ Valida el código ingresado por el usuario. Si es correcto, devuelve el perfil d
   "accessToken": "eyJhbGci...",
   "refreshToken": "dGhpcyBp...",
   "user": {
-    "id": "u_001",
-    "name": "Carlos Mendoza",
-    "email": "ejemplo@correo.com",
-    "level": "Bronce",
-    "creditLimit": 2500,
-    "availableCredit": 1950,
-    "cashbackRate": 0.005,
-    "score": 250,
-    "nextPayment": {
-      "date": "2026-06-01",
-      "amount": 649.50
-    }
+    "id": "664f...",
+    "name": "Ana Torres",
+    "username": "ana",
+    "email": "ana",
+    "level": "Plata",
+    "creditLimit": 8000,
+    "availableCredit": 6000,
+    "cashbackRate": 0.015,
+    "score": 800,
+    "nextPayment": { "date": "2026-06-01", "amount": 649.50 }
   }
 }
 ```
@@ -116,9 +72,10 @@ Valida el código ingresado por el usuario. Si es correcto, devuelve el perfil d
 
 | Código | Descripción |
 |--------|-------------|
-| `400` | Código con formato inválido |
-| `401` | Código incorrecto |
-| `410` | Código expirado |
+| `400` | Faltan usuario o contraseña |
+| `401` | Usuario o contraseña incorrectos |
+
+> **Cuentas de demo** (password `kueski123`): `carlos` (Bronce), `ana` (Plata), `diego` (Oro), `sofia` (Platino), `pedro` (Plata, con pago vencido → demuestra el rechazo por mora).
 
 ---
 
@@ -598,6 +555,8 @@ Calcula los planes de pago disponibles para un monto de carrito dado, según el 
 ```json
 {
   "approved": true,
+  "reason": null,
+  "message": null,
   "availableCredit": 1950,
   "plans": [
     {
@@ -641,6 +600,17 @@ Calcula los planes de pago disponibles para un monto de carrito dado, según el 
 | 6 | 0% | Plata |
 | 8 | 1.5% | Oro |
 | 12 | 1.5% | Platino |
+
+**Elegibilidad (`approved`, `reason`, `message`):** si la compra no es elegible, `approved` es `false` y `reason`/`message` indican por qué:
+
+| `reason` | Condición |
+|---|---|
+| `MONTO_INVALIDO` | monto menor a $50 |
+| `MORA` | el usuario tiene un pago `vencido` |
+| `LIMITE_COMPRAS_ACTIVAS` | ≥ 5 compras activas |
+| `CREDITO_INSUFICIENTE` | monto > crédito disponible |
+
+`POST /api/purchases` revalida la elegibilidad y responde **`422`** (sin registrar ni bajar crédito) cuando la compra no es aprobable.
 
 **Errores:**
 
@@ -892,8 +862,8 @@ Verifica que el servidor esté activo. No requiere autenticación.
 
 | # | Método | Ruta | Estado |
 |---|--------|------|--------|
-| 1 | POST | `/api/auth/send-otp` | ✅ Implementado |
-| 2 | POST | `/api/auth/verify-otp` | ✅ Implementado |
+| 1 | POST | `/api/auth/login` | ✅ Implementado |
+| 2 | — | _(reemplaza al OTP anterior)_ | — |
 | 3 | POST | `/api/auth/logout` | ✅ Implementado |
 | 4 | POST | `/api/auth/refresh-token` | ✅ Implementado |
 | 5 | GET | `/api/user` | ✅ Implementado |

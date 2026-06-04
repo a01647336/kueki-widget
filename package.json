@@ -72,6 +72,7 @@
     "autoprefixer": "^10.4.20",
     "express": "^4.19.2",
     "jsdom": "^29.1.1",
+    "mongodb-memory-server": "^11.2.0",
     "postcss": "^8.4.49",
     "sharp": "^0.34.5",
     "supertest": "^7.2.2",
@@ -87,7 +88,9 @@
       "https://*.mercadolibre.com.mx/*",
       "https://*.liverpool.com.mx/*",
       "https://*.coppel.com/*",
-      "https://*.elektra.com.mx/*"
+      "https://*.elektra.com.mx/*",
+      "https://*.onrender.com/*",
+      "http://localhost:3001/*"
     ],
     "permissions": [
       "storage"

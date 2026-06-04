@@ -1,116 +1,75 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AuthModal } from '../src/components/AuthModal';
+import * as api from '../src/utils/api';
 
-describe('AuthModal — Paso 1: Identificación', () => {
-  it('muestra el input de email/teléfono al renderizar', () => {
+const fakeUser: api.ApiUser = {
+  id: 'u_ana', name: 'Ana Torres', username: 'ana', email: 'ana', level: 'Plata',
+  creditLimit: 8000, availableCredit: 6000, cashbackRate: 0.015, score: 800,
+  nextPayment: { date: '2026-06-01', amount: 649.5 },
+};
+
+beforeEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('AuthModal — login usuario/contraseña', () => {
+  it('muestra los campos de usuario y contraseña', () => {
     render(<AuthModal onSuccess={() => {}} />);
-    expect(screen.getByPlaceholderText(/correo/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/usuario/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/contraseña/i)).toBeInTheDocument();
   });
 
-  it('muestra el botón "Continuar"', () => {
+  it('muestra el botón "Iniciar sesión"', () => {
     render(<AuthModal onSuccess={() => {}} />);
-    expect(screen.getByRole('button', { name: /Continuar/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Iniciar sesión/i })).toBeInTheDocument();
   });
 
-  it('muestra error si el email es inválido', async () => {
+  it('muestra el enlace de registro a Kueski', () => {
     render(<AuthModal onSuccess={() => {}} />);
-    const input = screen.getByPlaceholderText(/correo/i);
-    await userEvent.type(input, 'noesun@email');
-    fireEvent.click(screen.getByRole('button', { name: /Continuar/i }));
-    expect(await screen.findByText(/email o teléfono/i)).toBeInTheDocument();
+    const link = screen.getByRole('link', { name: /Regístrate en Kueski/i });
+    expect(link).toHaveAttribute('href', 'https://www.kueski.com');
   });
 
-  it('avanza al paso 2 con email válido', async () => {
+  it('valida campos vacíos', async () => {
     render(<AuthModal onSuccess={() => {}} />);
-    const input = screen.getByPlaceholderText(/correo/i);
-    await userEvent.type(input, 'carlos@ejemplo.com');
-    fireEvent.click(screen.getByRole('button', { name: /Continuar/i }));
-    await waitFor(() => {
-      expect(screen.getByText(/Verifica tu identidad/i)).toBeInTheDocument();
-    });
+    fireEvent.click(screen.getByRole('button', { name: /Iniciar sesión/i }));
+    expect(await screen.findByText(/Ingresa tu usuario y contraseña/i)).toBeInTheDocument();
   });
 
-  it('avanza al paso 2 con teléfono de 10 dígitos', async () => {
-    render(<AuthModal onSuccess={() => {}} />);
-    const input = screen.getByPlaceholderText(/correo/i);
-    await userEvent.type(input, '5512345678');
-    fireEvent.click(screen.getByRole('button', { name: /Continuar/i }));
-    await waitFor(() => {
-      expect(screen.getByText(/Verifica tu identidad/i)).toBeInTheDocument();
-    });
+  it('llama a onSuccess con el perfil cuando el login es correcto', async () => {
+    vi.spyOn(api, 'login').mockResolvedValue({ ok: true, user: fakeUser, invalidCredentials: false });
+    const onSuccess = vi.fn();
+    render(<AuthModal onSuccess={onSuccess} />);
+    await userEvent.type(screen.getByPlaceholderText(/usuario/i), 'ana');
+    await userEvent.type(screen.getByPlaceholderText(/contraseña/i), 'kueski123');
+    fireEvent.click(screen.getByRole('button', { name: /Iniciar sesión/i }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(fakeUser));
+  });
+
+  it('muestra error con credenciales inválidas', async () => {
+    vi.spyOn(api, 'login').mockResolvedValue({ ok: false, user: null, invalidCredentials: true });
+    render(<AuthModal onSuccess={vi.fn()} />);
+    await userEvent.type(screen.getByPlaceholderText(/usuario/i), 'ana');
+    await userEvent.type(screen.getByPlaceholderText(/contraseña/i), 'mala');
+    fireEvent.click(screen.getByRole('button', { name: /Iniciar sesión/i }));
+    expect(await screen.findByText(/usuario o contraseña incorrectos/i)).toBeInTheDocument();
+  });
+
+  it('muestra error de conexión si el servidor no responde', async () => {
+    vi.spyOn(api, 'login').mockResolvedValue({ ok: false, user: null, invalidCredentials: false });
+    render(<AuthModal onSuccess={vi.fn()} />);
+    await userEvent.type(screen.getByPlaceholderText(/usuario/i), 'ana');
+    await userEvent.type(screen.getByPlaceholderText(/contraseña/i), 'kueski123');
+    fireEvent.click(screen.getByRole('button', { name: /Iniciar sesión/i }));
+    expect(await screen.findByText(/no se pudo conectar/i)).toBeInTheDocument();
   });
 
   it('llama a onClose al cancelar', () => {
     const onClose = vi.fn();
-    render(<AuthModal onSuccess={() => {}} onClose={onClose} />);
+    render(<AuthModal onSuccess={vi.fn()} onClose={onClose} />);
     fireEvent.click(screen.getByRole('button', { name: /Cancelar/i }));
     expect(onClose).toHaveBeenCalledOnce();
-  });
-});
-
-describe('AuthModal — Paso 2: Verificación', () => {
-  async function goToStep2() {
-    render(<AuthModal onSuccess={vi.fn()} />);
-    const input = screen.getByPlaceholderText(/correo/i);
-    await userEvent.type(input, 'carlos@ejemplo.com');
-    fireEvent.click(screen.getByRole('button', { name: /Continuar/i }));
-    await waitFor(() => screen.getByText(/Verifica tu identidad/i));
-  }
-
-  it('muestra 6 inputs numéricos', async () => {
-    await goToStep2();
-    const codeInputs = screen.getAllByRole('textbox');
-    expect(codeInputs.length).toBeGreaterThanOrEqual(6);
-  });
-
-  it('el botón "Verificar código" está desactivado si los 6 dígitos no están completos', async () => {
-    await goToStep2();
-    const verifyBtn = screen.getByRole('button', { name: /Verificar/i });
-    expect(verifyBtn).toBeDisabled();
-  });
-
-  it('el botón "Verificar" se activa al llenar los 6 dígitos', async () => {
-    await goToStep2();
-    const firstInput = document.querySelector<HTMLInputElement>('input[inputmode="numeric"]')!;
-    fireEvent.paste(firstInput, { clipboardData: { getData: () => '123456' } });
-    await waitFor(() => {
-      const verifyBtn = screen.getByRole('button', { name: /Verificar/i });
-      expect(verifyBtn).not.toBeDisabled();
-    });
-  });
-
-  it('muestra el email enviado en el mensaje de verificación', async () => {
-    await goToStep2();
-    expect(screen.getByText(/carlos@ejemplo\.com/i)).toBeInTheDocument();
-  });
-
-  it('muestra el link "Reenviar"', async () => {
-    await goToStep2();
-    expect(screen.getByText(/Reenviar/i)).toBeInTheDocument();
-  });
-
-  it('permite volver al paso 1', async () => {
-    await goToStep2();
-    fireEvent.click(screen.getByText(/Cambiar identificador/i));
-    await waitFor(() => {
-      expect(screen.getByPlaceholderText(/correo/i)).toBeInTheDocument();
-    });
-  });
-
-  it('llama a onSuccess con el email al completar el código', async () => {
-    const onSuccess = vi.fn();
-    render(<AuthModal onSuccess={onSuccess} />);
-    const input = screen.getByPlaceholderText(/correo/i);
-    await userEvent.type(input, 'test@ejemplo.com');
-    fireEvent.click(screen.getByRole('button', { name: /Continuar/i }));
-    await waitFor(() => screen.getByText(/Verifica tu identidad/i));
-    const firstInput = document.querySelector<HTMLInputElement>('input[inputmode="numeric"]')!;
-    fireEvent.paste(firstInput, { clipboardData: { getData: () => '123456' } });
-    fireEvent.click(screen.getByRole('button', { name: /Verificar/i }));
-    await waitFor(() => {
-      expect(onSuccess).toHaveBeenCalledWith('test@ejemplo.com');
-    }, { timeout: 2000 });
   });
 });

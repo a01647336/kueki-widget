@@ -80,9 +80,11 @@ class SyncStorageCache {
 
   getScore    = ()                       => this.read<ScoreState>(KEYS.SCORE);
   setScore    = (v: ScoreState)          => this.write(KEYS.SCORE, v);
+  clearScore  = ()                       => this.remove(KEYS.SCORE);
 
   getHistory  = ()                       => this.read<Purchase[]>(KEYS.HISTORY) ?? [];
   setHistory  = (v: Purchase[])          => this.write(KEYS.HISTORY, v);
+  clearHistory= ()                       => this.remove(KEYS.HISTORY);
 
   getPrefs    = ()                       => this.read<UserPreferences>(KEYS.PREFS) ?? { disabledSites: [] };
   setPrefs    = (v: UserPreferences)     => this.write(KEYS.PREFS, v);

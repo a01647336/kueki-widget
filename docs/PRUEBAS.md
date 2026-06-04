@@ -5,19 +5,20 @@
 | Archivo de pruebas | Tests | Estado |
 |---|---|---|
 | `payments.test.ts` | 16 | ✅ Todos pasan |
-| `storage.test.ts` | 15 | ✅ Todos pasan |
-| `constants.test.ts` | 6 | ✅ Todos pasan |
-| `useScore.test.ts` | 11 | ✅ Todos pasan |
+| `storage.test.ts` | 12 | ✅ Todos pasan |
+| `constants.test.ts` | 19 | ✅ Todos pasan |
+| `useScore.test.ts` | 12 | ✅ Todos pasan |
 | `useCart.test.ts` | 10 | ✅ Todos pasan |
 | `useAuth.test.ts` | 8 | ✅ Todos pasan |
 | `KueskiBenefits.test.tsx` | 6 | ✅ Todos pasan |
-| `AuthModal.test.tsx` | 13 | ✅ Todos pasan |
+| `AuthModal.test.tsx` | 8 | ✅ Todos pasan |
 | `PaymentSimulator.test.tsx` | 12 | ✅ Todos pasan |
-| `api.test.ts` | 9 | ✅ Todos pasan |
-| `server.test.ts` | 22 | ✅ Todos pasan |
-| **Total** | **140** | **✅ 140 / 140** |
+| `api.test.ts` | 11 | ✅ Todos pasan |
+| `server.test.ts` | 18 | ✅ Todos pasan |
+| `eligibility.test.ts` | 11 | ✅ Todos pasan |
+| **Total** | **143** | **✅ 143 / 143** |
 
-> Las pruebas se ejecutan con `npm test`. Cubren la lógica del frontend (utils, hooks, componentes), el cliente HTTP (`api.ts`) y la integración del backend (los 19 endpoints con Supertest).
+> Las pruebas se ejecutan con `npm test`. Cubren la lógica del frontend (utils, hooks, componentes), el cliente HTTP (`api.ts`), la integración del backend multiusuario (Supertest + **MongoDB en memoria**) y los **escenarios de rechazo de compra** (`eligibility.test.ts`).
 
 ---
 
@@ -167,13 +168,13 @@ test: {
 | Test | Descripción | Resultado |
 |---|---|---|
 | Estado inicial sin sesión | isLoggedIn=false, user=null | ✅ |
-| login establece sesión | isLoggedIn=true, user tiene nombre y nivel | ✅ |
+| login con perfil del backend | Guarda nombre, nivel y crédito del `ApiUser` recibido | ✅ |
+| login guarda el usuario | `user.email` corresponde al usuario logueado | ✅ |
 | logout cierra sesión | isLoggedIn=false, user=null | ✅ |
+| logout limpia localStorage | `kueski_auth` se elimina | ✅ |
 | Persiste en localStorage | Tras login, `kueski_auth` guarda la sesión | ✅ |
 | Restaura sesión previa | Al montar recupera sesión existente en localStorage | ✅ |
-| Usuario tiene nivel Bronce inicial | El nivel inicial del usuario simulado es 'Bronce' | ✅ |
-| Usuario tiene nombre | El campo `name` del usuario no está vacío | ✅ |
-| login inicializa ScoreCoach | Al hacer login, `kueski_score` se inicializa con WELCOME_POINTS | ✅ |
+| Multiusuario | Cada usuario conserva su propio nivel y cashback | ✅ |
 
 ---
 
@@ -192,32 +193,20 @@ test: {
 
 ---
 
-### 8. `AuthModal.test.tsx` — Modal de autenticación 2 pasos (13 tests)
+### 8. `AuthModal.test.tsx` — Login usuario/contraseña (8 tests)
 
-**Componente probado**: `src/components/AuthModal.tsx`
+**Componente probado**: `src/components/AuthModal.tsx` (con `api.login` mockeado)
 
-#### Paso 1: Identificación
 | Test | Descripción | Resultado |
 |---|---|---|
-| Input de email/teléfono visible | Placeholder /correo/i presente al renderizar | ✅ |
-| Botón "Continuar" visible | Botón con nombre /Continuar/i presente | ✅ |
-| Error con email inválido | "noesun@email" muestra mensaje de error /email o teléfono/i | ✅ |
-| Avanza con email válido | "carlos@ejemplo.com" muestra /Verifica tu identidad/i | ✅ |
-| Avanza con teléfono de 10 dígitos | "5512345678" avanza al paso 2 | ✅ |
-| Botón Cancelar llama onClose | Clic en /Cancelar/i invoca el callback onClose | ✅ |
-
-#### Paso 2: Verificación
-| Test | Descripción | Resultado |
-|---|---|---|
-| Muestra 6 inputs numéricos | `getAllByRole('textbox').length >= 6` | ✅ |
-| Botón "Verificar" desactivado sin código | Botón disabled cuando el código está vacío | ✅ |
-| Botón se activa con 6 dígitos | Tras pegar "123456", el botón ya no está disabled | ✅ |
-| Muestra el email enviado | El identificador ingresado aparece en el texto | ✅ |
-| Link "Reenviar" presente | Texto /Reenviar/i visible | ✅ |
-| Volver al paso 1 | Clic en /Cambiar identificador/i regresa al input de email | ✅ |
-| onSuccess con el email correcto | Tras completar el código, `onSuccess` se llama con el email ingresado | ✅ |
-
-> **Nota técnica**: Los tests del paso 2 que completan el código usan `fireEvent.paste` con un `clipboardData` mock que devuelve `'123456'`. Esto aprovecha el handler `onPaste` del componente, que establece los 6 dígitos en un solo `setState`. Este enfoque fue necesario porque jsdom no replica el comportamiento de auto-focus que el componente usa para mover el cursor entre inputs.
+| Campos visibles | Inputs de usuario y contraseña presentes | ✅ |
+| Botón "Iniciar sesión" | Presente | ✅ |
+| Enlace de registro | "Regístrate en Kueski" apunta a `https://www.kueski.com` | ✅ |
+| Valida campos vacíos | Muestra "Ingresa tu usuario y contraseña" | ✅ |
+| Login correcto | `onSuccess` se llama con el perfil (`ApiUser`) | ✅ |
+| Credenciales inválidas | Muestra "Usuario o contraseña incorrectos" (401) | ✅ |
+| Servidor no disponible | Muestra "No se pudo conectar..." | ✅ |
+| Botón Cancelar llama onClose | Clic en /Cancelar/i invoca el callback | ✅ |
 
 ---
 
@@ -251,31 +240,44 @@ test: {
 |---|---|---|
 | Token roundtrip | `setToken`/`getToken` persisten en `localStorage` (`kueski_token`) | ✅ |
 | Token: limpiar | `setToken(null)` borra el token | ✅ |
-| verifyOtp guarda token | Mockeando la respuesta, guarda el access token y devuelve el perfil | ✅ |
-| verifyOtp offline | Si `fetch` falla, devuelve `null` y no fija token | ✅ |
+| login guarda token | Guarda el access token y devuelve el perfil | ✅ |
+| login 401 | Marca `invalidCredentials` cuando el server responde 401 | ✅ |
+| login offline | No marca `invalidCredentials` si el server no responde | ✅ |
 | Cabecera Authorization | Adjunta `Bearer <token>` cuando hay sesión | ✅ |
 | Sin token | No adjunta `Authorization` si no hay sesión | ✅ |
 | Fallback: fetch falla | `fetchUser` devuelve `null` ante error de red | ✅ |
 | Fallback: respuesta no-ok | `fetchUser` devuelve `null` si `res.ok === false` | ✅ |
 | savePurchase no lanza | Resuelve sin error aunque el servidor falle | ✅ |
-| calculatePlans | Devuelve los planes personalizados del backend | ✅ |
+| calculatePlans | Devuelve los planes y la elegibilidad del backend | ✅ |
 
-### 11. `server.test.ts` — Integración del backend (22 tests)
+### 11. `server.test.ts` — Integración del backend (18 tests)
 
-**Módulo probado**: `server/server.js` (los 19 endpoints, con Supertest y DB temporal)
+**Módulo probado**: `server/server.js` (con Supertest y **MongoDB en memoria**)
 
 | Grupo | Cobertura | Resultado |
 |---|---|---|
 | Health | `GET /api/health` responde `ok` | ✅ |
-| Autenticación | send-otp (200/400), verify-otp (tokens + 400), refresh-token (200/401) | ✅ |
-| Autorización | `GET /api/user` → 401 sin token, 200 con token; preferencias GET/PUT con merge | ✅ |
+| Autenticación | login (200/401/400), refresh-token (200) | ✅ |
+| Autorización / multiusuario | `GET /api/user` → 401 sin token; cada usuario obtiene su propio perfil; preferencias merge | ✅ |
 | Score | sube de nivel y `levelChanged`; siguiente nivel; logro idempotente (200 → 409) | ✅ |
-| **Planes personalizados** | Bronce → [2,4]; Oro → [2,4,6,8] con comisión en 8; no aprueba si excede crédito | ✅ |
-| Compras | crear (201) + baja de crédito + historial; duplicado (409); detalle (404); cambio de estado | ✅ |
-| Cashback | acumula el cashback de las compras registradas | ✅ |
-| Deals | lista y marca el activo del sitio; suscribir a deal inexistente (404) | ✅ |
+| **Planes personalizados** | Bronce (carlos) → [2,4]; Oro (diego) → [2,4,6,8] con comisión en 8 | ✅ |
+| Compras / aislamiento | una compra de un usuario no aparece en el historial de otro; baja el crédito | ✅ |
+| Cashback / Deals | acumula cashback; lista deals y marca el activo; suscribir inexistente (404) | ✅ |
 
-> El test usa un `DB_FILE` temporal (variable de entorno) y re-siembra la base antes de cada prueba para aislar el estado.
+> Usa `mongodb-memory-server` y re-siembra la base antes de cada prueba para aislar el estado.
+
+### 12. `eligibility.test.ts` — Escenarios de rechazo de compra (11 tests)
+
+**Probado**: `evaluateEligibility` (unitario) + `calculate-plans` / `POST /purchases` (integración).
+
+| Caso | Resultado esperado | Resultado |
+|---|---|---|
+| Al corriente y dentro del crédito | `approved: true` | ✅ |
+| Monto menor a $50 | `MONTO_INVALIDO` | ✅ |
+| Usuario con pago vencido (`pedro`) | `MORA` (prioridad sobre crédito) | ✅ |
+| 5 compras activas | `LIMITE_COMPRAS_ACTIVAS` | ✅ |
+| Monto > crédito disponible | `CREDITO_INSUFICIENTE` | ✅ |
+| `POST /purchases` no elegible | responde **422** y **no baja el crédito** | ✅ |
 
 ---
 
@@ -291,8 +293,8 @@ Cada prueba opera sobre un `Map` en memoria que se reinicia antes de cada test (
 ### Mock de motion/react
 Los componentes de Framer Motion (`motion.div`, `AnimatePresence`, etc.) se reemplazan por sus equivalentes HTML simples. Esto evita errores de contexto de animación en jsdom y hace las pruebas más rápidas y predecibles.
 
-### Estrategia para inputs OTP (código de 6 dígitos)
-El componente `AuthModal` usa refs y auto-focus para mover el cursor entre inputs al escribir. Como jsdom no soporta el comportamiento de focus del navegador real, las pruebas que necesitan rellenar el código usan `fireEvent.paste` con un `clipboardData` mock, aprovechando el handler de pegado que el componente ya incluye (`handleCodePaste`).
+### Mock de crypto
+`test/setup.ts` define `crypto.randomUUID` (determinista para los tests) **preservando** `getRandomValues`/`subtle` reales de Node, que el driver de MongoDB necesita.
 
-### Tiempos de espera
-El componente `AuthModal` simula 1 segundo de carga antes de llamar a `onSuccess`. Las pruebas que verifican este comportamiento usan `waitFor` con `timeout: 2000` para dar margen suficiente.
+### MongoDB en memoria
+Los tests de backend (`server.test.ts`, `eligibility.test.ts`) levantan una instancia efímera con `mongodb-memory-server` y conectan Mongoose a ella vía `connectDB(uri)`. No tocan ninguna base real.

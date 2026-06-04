@@ -1,7 +1,7 @@
 {
   "name": "kueski-widget-server",
   "version": "1.0.0",
-  "description": "Backend simple para el Kueski Smart Widget (Express + JSON DB)",
+  "description": "Backend del Kueski Smart Widget (Express + MongoDB + JWT)",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {
@@ -9,7 +9,9 @@
     "dev": "node --watch server.js"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "mongoose": "^9.6.3"
   }
 }

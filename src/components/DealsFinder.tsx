@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Tag, Sparkles, ExternalLink, Percent, Clock } from 'lucide-react';
-import { fetchDeals } from '../utils/api';
+import { Tag, Sparkles, ExternalLink, Percent, Clock, BellRing, Check } from 'lucide-react';
+import { fetchDeals, subscribeDeal } from '../utils/api';
 import type { ApiDeal } from '../utils/api';
 
 interface DealsFinderProps {
@@ -10,6 +10,7 @@ interface DealsFinderProps {
 
 // Tipo interno normalizado
 interface Deal {
+  id: number;
   site: string;
   siteKey: string;
   title: string;
@@ -20,11 +21,20 @@ interface Deal {
   color: string;
 }
 
+// URL pública de cada tienda (para el botón "Ver más").
+const SITE_URLS: Record<string, string> = {
+  amazon:       'https://www.amazon.com.mx',
+  mercadolibre: 'https://www.mercadolibre.com.mx',
+  liverpool:    'https://www.liverpool.com.mx',
+  coppel:       'https://www.coppel.com',
+  elektra:      'https://www.elektra.com.mx',
+};
+
 // Ofertas estáticas como fallback cuando la API no está disponible
 function buildStaticDeals(currentSite: string): Deal[] {
   return [
     {
-      site: 'Amazon', siteKey: 'amazon',
+      id: 1, site: 'Amazon', siteKey: 'amazon',
       title: 'Pago diferido disponible',
       description: 'Compra ahora y paga en 4 quincenas sin intereses',
       discount: 'Sin intereses', tag: 'Kueski Pay',
@@ -32,7 +42,7 @@ function buildStaticDeals(currentSite: string): Deal[] {
       color: 'bg-teal-500',
     },
     {
-      site: 'Mercado Libre', siteKey: 'mercadolibre',
+      id: 2, site: 'Mercado Libre', siteKey: 'mercadolibre',
       title: '3 MSI + Cashback 5%',
       description: 'Meses sin intereses + reembolso en tu siguiente compra',
       discount: '5% cashback', tag: 'Oferta especial',
@@ -40,7 +50,7 @@ function buildStaticDeals(currentSite: string): Deal[] {
       color: 'bg-blue-700',
     },
     {
-      site: 'Liverpool', siteKey: 'liverpool',
+      id: 3, site: 'Liverpool', siteKey: 'liverpool',
       title: 'Envío gratis con Kueski',
       description: 'Paga con Kueski Pay y obtén envío sin costo',
       discount: 'Envío gratis', tag: 'Beneficio',
@@ -48,7 +58,7 @@ function buildStaticDeals(currentSite: string): Deal[] {
       color: 'bg-blue-800',
     },
     {
-      site: 'Coppel', siteKey: 'coppel',
+      id: 4, site: 'Coppel', siteKey: 'coppel',
       title: 'Hasta 6 MSI',
       description: 'Meses sin intereses en compras mayores a $1,500',
       discount: '6 MSI', tag: 'Disponible',
@@ -56,7 +66,7 @@ function buildStaticDeals(currentSite: string): Deal[] {
       color: 'bg-blue-600',
     },
     {
-      site: 'Elektra', siteKey: 'elektra',
+      id: 5, site: 'Elektra', siteKey: 'elektra',
       title: 'Paga a plazos con 0% interés',
       description: 'Hasta 4 quincenas sin intereses en electrónica y más',
       discount: '0% interés', tag: 'Kueski Pay',
@@ -72,6 +82,7 @@ function apiDealToDeal(d: ApiDeal, currentSite: string): Deal {
     liverpool: 'Liverpool', coppel: 'Coppel', elektra: 'Elektra',
   };
   return {
+    id:          d.id,
     site:        SITE_NAMES[d.site] ?? d.site,
     siteKey:     d.site,
     title:       d.title,
@@ -85,6 +96,7 @@ function apiDealToDeal(d: ApiDeal, currentSite: string): Deal {
 
 export function DealsFinder({ currentSite }: DealsFinderProps) {
   const [deals, setDeals] = useState<Deal[]>(() => buildStaticDeals(currentSite));
+  const [subscribed, setSubscribed] = useState(false);
 
   // Intentar cargar deals dinámicos desde el backend
   useEffect(() => {
@@ -98,9 +110,21 @@ export function DealsFinder({ currentSite }: DealsFinderProps) {
   // Actualizar estado activo si cambia el sitio (sin re-fetch)
   useEffect(() => {
     setDeals((prev) => prev.map((d) => ({ ...d, active: d.siteKey === currentSite })));
+    setSubscribed(false);
   }, [currentSite]);
 
   const activeDeal = deals.find((d) => d.active);
+
+  const handleVerMas = (deal: Deal) => {
+    const url = SITE_URLS[deal.siteKey];
+    if (url) window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleActivarAlertas = () => {
+    if (subscribed) return;
+    setSubscribed(true);
+    if (activeDeal) void subscribeDeal(activeDeal.id);
+  };
 
   return (
     <div className="space-y-4">
@@ -127,7 +151,10 @@ export function DealsFinder({ currentSite }: DealsFinderProps) {
               <Percent className="w-4 h-4" />
               <span className="text-sm font-semibold">{activeDeal.discount}</span>
             </div>
-            <button className="bg-white text-gray-900 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-100 transition-colors flex items-center gap-1">
+            <button
+              onClick={() => handleVerMas(activeDeal)}
+              className="bg-white text-gray-900 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-100 transition-colors flex items-center gap-1"
+            >
               Ver más
               <ExternalLink className="w-3 h-3" />
             </button>
@@ -207,8 +234,20 @@ export function DealsFinder({ currentSite }: DealsFinderProps) {
       </div>
 
       {/* CTA */}
-      <button className="w-full bg-emerald-600 text-white py-3 rounded-lg font-semibold hover:bg-emerald-700 transition-colors text-sm">
-        Activar alertas de ofertas
+      <button
+        onClick={handleActivarAlertas}
+        disabled={subscribed}
+        className={`w-full py-3 rounded-lg font-semibold transition-colors text-sm flex items-center justify-center gap-2 ${
+          subscribed
+            ? 'bg-emerald-100 text-emerald-700 cursor-default'
+            : 'bg-emerald-600 text-white hover:bg-emerald-700'
+        }`}
+      >
+        {subscribed ? (
+          <><Check className="w-4 h-4" /> ¡Alertas activadas!</>
+        ) : (
+          <><BellRing className="w-4 h-4" /> Activar alertas de ofertas</>
+        )}
       </button>
     </div>
   );

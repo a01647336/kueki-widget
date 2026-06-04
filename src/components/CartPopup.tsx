@@ -58,12 +58,9 @@ export function CartPopup({
                 <p className="text-sm text-gray-500 text-center">El carrito está vacío</p>
               ) : (
                 cartItems
-                  .reduce<typeof cartItems>((acc, item) => {
-                    const found = acc.find(i => i.name === item.name && i.price === item.price);
-                    if (found) found.qty += item.qty;
-                    else acc.push({ ...item });
-                    return acc;
-                  }, [])
+                  .filter((item, idx, arr) =>
+                    arr.findIndex(i => i.name === item.name && i.price === item.price) === idx
+                  )
                   .map((item) => (
                   <div key={item.id} className="flex items-center justify-between text-sm">
                     <span className="text-gray-700 truncate flex-1 mr-2">{item.name}</span>

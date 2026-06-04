@@ -28,7 +28,7 @@ Documentación de todos los endpoints REST que requiere la versión funcional fi
 
 ## 1. Autenticación
 
-### 1.1 Enviar código OTP ❌
+### 1.1 Enviar código OTP ✅
 
 ```
 POST /api/auth/send-otp
@@ -69,7 +69,7 @@ Envía un código de verificación de 6 dígitos al email o teléfono del usuari
 
 ---
 
-### 1.2 Verificar código OTP ❌
+### 1.2 Verificar código OTP ✅
 
 ```
 POST /api/auth/verify-otp
@@ -122,7 +122,7 @@ Valida el código ingresado por el usuario. Si es correcto, devuelve el perfil d
 
 ---
 
-### 1.3 Cerrar sesión ❌
+### 1.3 Cerrar sesión ✅
 
 ```
 POST /api/auth/logout
@@ -148,7 +148,7 @@ Invalida el token de sesión actual en el servidor.
 
 ---
 
-### 1.4 Renovar token de sesión ❌
+### 1.4 Renovar token de sesión ✅
 
 ```
 POST /api/auth/refresh-token
@@ -181,7 +181,7 @@ Genera un nuevo access token usando el refresh token almacenado. Permite mantene
 
 ## 2. Usuario
 
-### 2.1 Obtener perfil del usuario 🔶
+### 2.1 Obtener perfil del usuario ✅
 
 ```
 GET /api/user
@@ -190,7 +190,7 @@ Authorization: Bearer <accessToken>
 
 Devuelve el perfil completo del usuario autenticado: datos personales, nivel, crédito disponible y próximo pago.
 
-> Estado actual: implementado sin autenticación y con usuario hardcodeado (id=1).
+> Implementado con `authMiddleware` (requiere JWT). El demo opera sobre el usuario id=1.
 
 **Response `200 OK`:**
 ```json
@@ -231,7 +231,7 @@ Devuelve el perfil completo del usuario autenticado: datos personales, nivel, cr
 
 ---
 
-### 2.2 Obtener preferencias del usuario ❌
+### 2.2 Obtener preferencias del usuario ✅
 
 ```
 GET /api/user/preferences
@@ -240,7 +240,7 @@ Authorization: Bearer <accessToken>
 
 Devuelve la configuración personal del usuario: sitios desactivados y preferencias de notificaciones.
 
-> Estado actual: almacenado localmente en `localStorage` bajo la clave `kueski_prefs`.
+> Implementado en el backend (persiste en `kueski_db.json`). El frontend además guarda una copia en `localStorage` (`kueski_prefs`) como fallback.
 
 **Response `200 OK`:**
 ```json
@@ -267,7 +267,7 @@ Devuelve la configuración personal del usuario: sitios desactivados y preferenc
 
 ---
 
-### 2.3 Actualizar preferencias del usuario ❌
+### 2.3 Actualizar preferencias del usuario ✅
 
 ```
 PUT /api/user/preferences
@@ -311,7 +311,7 @@ Actualiza la configuración del usuario. Acepta campos parciales (solo enviar lo
 
 ## 3. Score y Gamificación
 
-### 3.1 Obtener score del usuario ❌
+### 3.1 Obtener score del usuario ✅
 
 ```
 GET /api/user/score
@@ -320,7 +320,7 @@ Authorization: Bearer <accessToken>
 
 Devuelve el estado actual del programa de puntos: puntos acumulados, nivel, progreso al siguiente nivel y logros.
 
-> Estado actual: almacenado en `localStorage` bajo la clave `kueski_score`. El backend solo tiene `PUT /api/user/score`.
+> Implementado: calcula nivel, `pointsToNextLevel` y logros desde la DB. El frontend mantiene una copia en `localStorage` (`kueski_score`).
 
 **Response `200 OK`:**
 ```json
@@ -383,7 +383,7 @@ Devuelve el estado actual del programa de puntos: puntos acumulados, nivel, prog
 
 ---
 
-### 3.2 Actualizar puntos del usuario 🔶
+### 3.2 Actualizar puntos del usuario ✅
 
 ```
 PUT /api/user/score
@@ -392,7 +392,7 @@ Authorization: Bearer <accessToken>
 
 Suma puntos al usuario por una acción específica. Recalcula automáticamente el nivel si se cruza un umbral.
 
-> Estado actual: implementado en `server/server.js` sin autenticación ni validación de acción.
+> Implementado con auth. Recalcula nivel, cashback y crédito según el motor de `lib/rules.js`.
 
 **Request body:**
 ```json
@@ -443,7 +443,7 @@ Suma puntos al usuario por una acción específica. Recalcula automáticamente e
 
 ---
 
-### 3.3 Completar un logro ❌
+### 3.3 Completar un logro ✅
 
 ```
 POST /api/user/achievements/:achievementId/complete
@@ -494,7 +494,7 @@ Authorization: Bearer <accessToken>
 
 Devuelve la lista de promociones activas. Opcionalmente filtra por sitio de e-commerce.
 
-> Estado actual: implementado en `server/server.js`. Datos estáticos en `kueski_db.json`.
+> Implementado con auth. Datos en `kueski_db.json`.
 
 **Query parameters:**
 
@@ -537,7 +537,7 @@ Devuelve la lista de promociones activas. Opcionalmente filtra por sitio de e-co
 
 ---
 
-### 4.2 Suscribirse a alertas de un deal ❌
+### 4.2 Suscribirse a alertas de un deal ✅
 
 ```
 POST /api/deals/:dealId/subscribe
@@ -572,7 +572,7 @@ Registra al usuario para recibir alertas cuando haya cambios en una promoción e
 
 ## 5. Compras
 
-### 5.1 Calcular planes de pago disponibles ❌
+### 5.1 Calcular planes de pago disponibles ✅
 
 ```
 POST /api/purchases/calculate-plans
@@ -581,7 +581,7 @@ Authorization: Bearer <accessToken>
 
 Calcula los planes de pago disponibles para un monto de carrito dado, según el nivel y crédito disponible del usuario.
 
-> Estado actual: la lógica vive completamente en el frontend (`src/utils/payments.ts`), sin validación de crédito disponible en el servidor.
+> Implementado: el backend calcula los planes según el nivel y el crédito disponible del usuario (`lib/rules.js`) y devuelve `approved`. El frontend usa `src/utils/payments.ts` como fallback offline con las mismas reglas.
 
 **Request body:**
 ```json
@@ -651,7 +651,7 @@ Calcula los planes de pago disponibles para un monto de carrito dado, según el 
 
 ---
 
-### 5.2 Registrar una compra 🔶
+### 5.2 Registrar una compra ✅
 
 ```
 POST /api/purchases
@@ -660,7 +660,7 @@ Authorization: Bearer <accessToken>
 
 Confirma una compra, reduce el crédito disponible del usuario y registra el cashback obtenido.
 
-> Estado actual: implementado en `server/server.js` sin autenticación. Devuelve `201 Created`.
+> Implementado con auth. Recalcula el cashback server-side si se omite y reduce el crédito disponible. Devuelve `201 Created`.
 
 **Request body:**
 ```json
@@ -705,7 +705,7 @@ Confirma una compra, reduce el crédito disponible del usuario y registra el cas
 
 ---
 
-### 5.3 Obtener historial de compras 🔶
+### 5.3 Obtener historial de compras ✅
 
 ```
 GET /api/purchases
@@ -714,7 +714,7 @@ Authorization: Bearer <accessToken>
 
 Devuelve el historial de compras del usuario ordenado por fecha descendente.
 
-> Estado actual: implementado en `server/server.js` sin autenticación ni filtros.
+> Implementado con auth y filtros opcionales `status` y `site`.
 
 **Query parameters:**
 
@@ -747,7 +747,7 @@ Devuelve el historial de compras del usuario ordenado por fecha descendente.
 
 ---
 
-### 5.4 Obtener detalle de una compra ❌
+### 5.4 Obtener detalle de una compra ✅
 
 ```
 GET /api/purchases/:purchaseId
@@ -785,7 +785,7 @@ Devuelve el detalle completo de una compra específica.
 
 ---
 
-### 5.5 Actualizar estado de una compra ❌
+### 5.5 Actualizar estado de una compra ✅
 
 ```
 PUT /api/purchases/:purchaseId/status
@@ -828,7 +828,7 @@ Actualiza el estado de una compra de `activo` a `pagado`. Puede ser invocado por
 
 ## 6. Cashback
 
-### 6.1 Obtener historial de cashback ❌
+### 6.1 Obtener historial de cashback ✅
 
 ```
 GET /api/user/cashback
@@ -837,7 +837,7 @@ Authorization: Bearer <accessToken>
 
 Devuelve el cashback total acumulado del usuario y el detalle por compra.
 
-> Estado actual: el cashback se calcula en el frontend (`src/utils/payments.ts`) al momento de la compra y se guarda en el registro de la compra. No existe un endpoint dedicado.
+> Implementado: agrega el cashback de todas las compras registradas en la DB y devuelve el total y el detalle.
 
 **Response `200 OK`:**
 ```json
@@ -892,22 +892,24 @@ Verifica que el servidor esté activo. No requiere autenticación.
 
 | # | Método | Ruta | Estado |
 |---|--------|------|--------|
-| 1 | POST | `/api/auth/send-otp` | ❌ Pendiente |
-| 2 | POST | `/api/auth/verify-otp` | ❌ Pendiente |
-| 3 | POST | `/api/auth/logout` | ❌ Pendiente |
-| 4 | POST | `/api/auth/refresh-token` | ❌ Pendiente |
-| 5 | GET | `/api/user` | 🔶 Parcial |
-| 6 | GET | `/api/user/score` | ❌ Pendiente |
-| 7 | PUT | `/api/user/score` | 🔶 Parcial |
-| 8 | POST | `/api/user/achievements/:achievementId/complete` | ❌ Pendiente |
-| 9 | GET | `/api/user/preferences` | ❌ Pendiente |
-| 10 | PUT | `/api/user/preferences` | ❌ Pendiente |
+| 1 | POST | `/api/auth/send-otp` | ✅ Implementado |
+| 2 | POST | `/api/auth/verify-otp` | ✅ Implementado |
+| 3 | POST | `/api/auth/logout` | ✅ Implementado |
+| 4 | POST | `/api/auth/refresh-token` | ✅ Implementado |
+| 5 | GET | `/api/user` | ✅ Implementado |
+| 6 | GET | `/api/user/score` | ✅ Implementado |
+| 7 | PUT | `/api/user/score` | ✅ Implementado |
+| 8 | POST | `/api/user/achievements/:achievementId/complete` | ✅ Implementado |
+| 9 | GET | `/api/user/preferences` | ✅ Implementado |
+| 10 | PUT | `/api/user/preferences` | ✅ Implementado |
 | 11 | GET | `/api/deals` | ✅ Implementado |
-| 12 | POST | `/api/deals/:dealId/subscribe` | ❌ Pendiente |
-| 13 | POST | `/api/purchases/calculate-plans` | ❌ Pendiente |
-| 14 | POST | `/api/purchases` | 🔶 Parcial |
-| 15 | GET | `/api/purchases` | 🔶 Parcial |
-| 16 | GET | `/api/purchases/:purchaseId` | ❌ Pendiente |
-| 17 | PUT | `/api/purchases/:purchaseId/status` | ❌ Pendiente |
-| 18 | GET | `/api/user/cashback` | ❌ Pendiente |
+| 12 | POST | `/api/deals/:dealId/subscribe` | ✅ Implementado |
+| 13 | POST | `/api/purchases/calculate-plans` | ✅ Implementado |
+| 14 | POST | `/api/purchases` | ✅ Implementado |
+| 15 | GET | `/api/purchases` | ✅ Implementado |
+| 16 | GET | `/api/purchases/:purchaseId` | ✅ Implementado |
+| 17 | PUT | `/api/purchases/:purchaseId/status` | ✅ Implementado |
+| 18 | GET | `/api/user/cashback` | ✅ Implementado |
 | 19 | GET | `/api/health` | ✅ Implementado |
+
+> **Estado:** los 19 endpoints están implementados en `server/server.js` y cubiertos por pruebas de integración (`test/server.test.ts`). Todos requieren `Authorization: Bearer <accessToken>` salvo los de autenticación y health.

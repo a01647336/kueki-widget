@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ArrowLeft, Loader2, ShieldCheck } from 'lucide-react';
+import { sendOtp, verifyOtp } from '../utils/api';
 
 interface AuthModalProps {
   onSuccess: (email: string) => void;
@@ -28,6 +29,8 @@ export function AuthModal({ onSuccess, onClose }: AuthModalProps) {
       return;
     }
     setIdentifierError('');
+    // Solicita el OTP al backend (silencioso: si no hay server, seguimos en modo demo).
+    void sendOtp(identifier.trim());
     setStep('verify');
   }, [identifier]);
 
@@ -56,7 +59,11 @@ export function AuthModal({ onSuccess, onClose }: AuthModalProps) {
   const handleCodeSubmit = useCallback(() => {
     if (code.filter(Boolean).length < 6) return;
     setStep('loading');
-    setTimeout(() => onSuccess(identifier.trim()), 1000);
+    const id = identifier.trim();
+    // Verifica el código en el backend. El efecto guarda el JWT para autenticar
+    // las llamadas siguientes. Si el server no responde, `verifyOtp` devuelve
+    // null y continuamos en modo demo con localStorage.
+    verifyOtp(id, code.join('')).finally(() => onSuccess(id));
   }, [code, identifier, onSuccess]);
 
   const handleCodePaste = useCallback((e: React.ClipboardEvent) => {

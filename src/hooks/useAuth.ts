@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import type { User } from '../types';
 import { storage } from '../utils/storage';
 import { POINTS, LEVEL_CASHBACK_RATES, LEVEL_CREDIT_LIMITS } from '../constants/kueski';
+import { logout as apiLogout } from '../utils/api';
 
 const MOCK_USER: Omit<User, 'email'> = {
   name: 'Carlos Mendoza',
@@ -42,6 +43,7 @@ export function useAuth() {
 
   const logout = useCallback(() => {
     storage.clearAuth();
+    void apiLogout(); // invalida la sesión en el server y limpia el token local
     setState({ isLoggedIn: false, user: null });
   }, []);
 

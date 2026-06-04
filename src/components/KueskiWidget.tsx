@@ -243,7 +243,7 @@ export function KueskiWidget({
                       currentSite={currentSite}
                       isLoggedIn={isLoggedIn}
                       cartTotal={cartTotal}
-                      userLevel={user.level}
+                      userLevel={score.level}
                       showSimulator={showSimulator}
                       onOpenSimulator={() => setShowSimulator(true)}
                       onCloseSimulator={handleCloseSimulator}

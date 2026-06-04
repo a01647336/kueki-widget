@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle2, Info } from 'lucide-react';
+import { CheckCircle2, Info, AlertTriangle } from 'lucide-react';
 import type { LevelName, Purchase } from '../types';
-import { calculateInstallmentPlans, calculateCashback, formatMXN } from '../utils/payments';
+import { calculateInstallmentPlans, calculateCashback, formatMXN, type InstallmentPlan } from '../utils/payments';
 import { SITE_DISPLAY_NAMES } from '../constants/kueski';
+import { calculatePlans } from '../utils/api';
 import { KueskiPayLogo } from './KueskiPayLogo';
 
 interface PaymentSimulatorProps {
@@ -21,12 +22,32 @@ export function PaymentSimulator({
   onConfirm,
   onClose,
 }: PaymentSimulatorProps) {
-  const plans = calculateInstallmentPlans(cartTotal, userLevel);
-  const [selectedPlan, setSelectedPlan] = useState(plans[1] ?? plans[0]);
+  // Planes locales como base inmediata (offline / mientras carga el backend).
+  const [plans, setPlans] = useState<InstallmentPlan[]>(() =>
+    calculateInstallmentPlans(cartTotal, userLevel)
+  );
+  const [selectedPlan, setSelectedPlan] = useState<InstallmentPlan>(() => {
+    const initial = calculateInstallmentPlans(cartTotal, userLevel);
+    return initial[1] ?? initial[0];
+  });
+  const [approved, setApproved] = useState(true);
   const [confirmed, setConfirmed] = useState(false);
 
   const cashback = calculateCashback(cartTotal, userLevel);
   const siteName = SITE_DISPLAY_NAMES[currentSite] ?? currentSite;
+
+  // El backend es la autoridad: recalcula los planes según el nivel y el
+  // crédito disponible del usuario. Si no responde, usamos los planes locales.
+  useEffect(() => {
+    let active = true;
+    calculatePlans(cartTotal).then((res) => {
+      if (!active || !res || res.plans.length === 0) return;
+      setPlans(res.plans);
+      setApproved(res.approved);
+      setSelectedPlan(res.plans[1] ?? res.plans[0]);
+    });
+    return () => { active = false; };
+  }, [cartTotal]);
 
   const handleConfirm = () => {
     setConfirmed(true);
@@ -68,6 +89,15 @@ export function PaymentSimulator({
         <p className="text-xs text-emerald-700 font-semibold mb-1">Total de tu carrito en {siteName}</p>
         <p className="text-2xl font-bold text-gray-900">{formatMXN(cartTotal)}</p>
       </div>
+
+      {!approved && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-700">
+            El monto supera tu crédito disponible. Sube de nivel en el Score Coach para ampliar tu límite.
+          </p>
+        </div>
+      )}
 
       <div className="space-y-2">
         <p className="text-sm font-semibold text-gray-700">Elige tu plan de pago:</p>
@@ -125,6 +155,7 @@ export function PaymentSimulator({
           className="flex-1 bg-emerald-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
         >
           <span>Confirmar con</span>
+          {' '}
           <KueskiPayLogo size="sm" variant="white" />
         </button>
       </div>

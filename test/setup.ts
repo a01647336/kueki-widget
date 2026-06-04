@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { beforeEach } from 'vitest';
+import { beforeEach, vi } from 'vitest';
 import { storage } from '../src/utils/storage';
 
 // Mock localStorage
@@ -20,6 +20,9 @@ Object.defineProperty(window, 'localStorage', { value: localStorageMock });
 // Resetear caché en memoria del storage entre tests
 beforeEach(() => {
   storage._resetForTesting();
+  // Por defecto simulamos que el backend NO está disponible: así se ejercita
+  // el fallback offline (localStorage). Los tests de api.ts sobreescriben esto.
+  global.fetch = vi.fn(() => Promise.reject(new Error('offline'))) as unknown as typeof fetch;
 });
 
 // Mock crypto.randomUUID

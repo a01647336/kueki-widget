@@ -12,16 +12,20 @@ export interface InstallmentPlan {
 
 const COMMISSION_RATE_EXTENDED = 0.015; // 1.5% para planes extendidos (Oro/Platino)
 
+/**
+ * Calcula los planes de quincenas disponibles para un nivel.
+ * Es el fallback offline del endpoint `POST /api/purchases/calculate-plans`
+ * y comparte exactamente las reglas de `server/lib/rules.js`: el máximo de
+ * quincenas lo determina el nivel del usuario.
+ */
 export function calculateInstallmentPlans(
   cartTotal: number,
   userLevel: LevelName
 ): InstallmentPlan[] {
   const maxInstallments = LEVEL_MAX_INSTALLMENTS[userLevel];
 
-  const basePlans = [2, 4, 6, 8, 12];
-
-  return basePlans
-    .filter((p) => p <= maxInstallments || p <= 6)
+  return [2, 4, 6, 8, 12]
+    .filter((periods) => periods <= maxInstallments)
     .map((periods) => {
       const isExtended = periods > 6;
       const commissionRate = isExtended ? COMMISSION_RATE_EXTENDED : 0;
@@ -38,11 +42,6 @@ export function calculateInstallmentPlans(
         commissionAmount: Math.ceil(cartTotal * commissionRate * 100) / 100,
         requiresLevel,
       };
-    })
-    .filter((plan) => {
-      if (!plan.requiresLevel) return true;
-      const levelOrder: LevelName[] = ['Bronce', 'Plata', 'Oro', 'Platino'];
-      return levelOrder.indexOf(userLevel) >= levelOrder.indexOf(plan.requiresLevel);
     });
 }
 

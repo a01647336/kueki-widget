@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import type { ScoreState, Achievement, LevelName } from '../types';
 import { storage } from '../utils/storage';
 import { LEVEL_THRESHOLDS, LEVEL_ORDER } from '../constants/kueski';
+import { updateScore, completeAchievement as apiCompleteAchievement } from '../utils/api';
 
 function computeLevel(points: number): LevelName {
   let level: LevelName = 'Bronce';
@@ -33,6 +34,9 @@ export function useScore() {
       const level = computeLevel(points);
       const next: ScoreState = { ...prev, points, level };
       storage.setScore(next);
+      // Sincroniza con el backend para que los planes personalizados reflejen
+      // el score real del usuario. Silencioso si el server no está disponible.
+      void updateScore(points);
       return next;
     });
   }, []);
@@ -48,6 +52,7 @@ export function useScore() {
       );
       const next: ScoreState = { points, level, achievements };
       storage.setScore(next);
+      void apiCompleteAchievement(id);
       return next;
     });
   }, []);

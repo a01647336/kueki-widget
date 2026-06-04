@@ -12,8 +12,12 @@
 | `useAuth.test.ts` | 8 | ✅ Todos pasan |
 | `KueskiBenefits.test.tsx` | 6 | ✅ Todos pasan |
 | `AuthModal.test.tsx` | 13 | ✅ Todos pasan |
-| `PaymentSimulator.test.tsx` | 13 | ✅ Todos pasan |
-| **Total** | **108** | **✅ 108 / 108** |
+| `PaymentSimulator.test.tsx` | 12 | ✅ Todos pasan |
+| `api.test.ts` | 9 | ✅ Todos pasan |
+| `server.test.ts` | 22 | ✅ Todos pasan |
+| **Total** | **140** | **✅ 140 / 140** |
+
+> Las pruebas se ejecutan con `npm test`. Cubren la lógica del frontend (utils, hooks, componentes), el cliente HTTP (`api.ts`) y la integración del backend (los 19 endpoints con Supertest).
 
 ---
 
@@ -22,19 +26,20 @@
 - **Framework**: Vitest 4.x
 - **Utilidades de componentes**: @testing-library/react + @testing-library/user-event
 - **Matchers adicionales**: @testing-library/jest-dom
+- **Pruebas de backend**: Supertest (peticiones HTTP en memoria contra el `app` de Express)
 - **Entorno**: jsdom (navegador simulado en Node.js)
 - **Comando para ejecutar**: `npm test`
 
-### Configuración relevante (`vite.config.ts`)
+### Configuración relevante (`vitest.config.ts`)
 ```ts
 test: {
   globals: true,
   environment: 'jsdom',
-  setupFiles: ['./src/test/setup.ts'],
+  setupFiles: ['./test/setup.ts'],
 }
 ```
 
-### Mocks globales (`src/test/setup.ts`)
+### Mocks globales (`test/setup.ts`)
 - `localStorage`: mapeado a un `Map` en memoria para aislar pruebas
 - `crypto.randomUUID`: devuelve un UUID secuencial (`uuid-1`, `uuid-2`, …)
 - `motion/react`: todos los componentes `motion.*` se renderizan como su equivalente HTML nativo; `AnimatePresence` es un passthrough
@@ -45,7 +50,7 @@ test: {
 
 ### 1. `payments.test.ts` — Lógica de pagos (16 tests)
 
-**Módulo probado**: `src/app/utils/payments.ts`
+**Módulo probado**: `src/utils/payments.ts`
 
 #### `calculateInstallmentPlans`
 | Test | Descripción | Resultado |
@@ -79,7 +84,7 @@ test: {
 
 ### 2. `storage.test.ts` — Abstracción de localStorage (15 tests)
 
-**Módulo probado**: `src/app/utils/storage.ts`
+**Módulo probado**: `src/utils/storage.ts`
 
 | Test | Descripción | Resultado |
 |---|---|---|
@@ -103,7 +108,7 @@ test: {
 
 ### 3. `constants.test.ts` — Constantes centralizadas (6 tests)
 
-**Módulo probado**: `src/app/constants/kueski.ts`
+**Módulo probado**: `src/constants/kueski.ts`
 
 | Test | Descripción | Resultado |
 |---|---|---|
@@ -118,7 +123,7 @@ test: {
 
 ### 4. `useScore.test.ts` — Hook de gamificación (11 tests)
 
-**Módulo probado**: `src/app/hooks/useScore.ts`
+**Módulo probado**: `src/hooks/useScore.ts`
 
 | Test | Descripción | Resultado |
 |---|---|---|
@@ -138,7 +143,7 @@ test: {
 
 ### 5. `useCart.test.ts` — Hook de carrito (10 tests)
 
-**Módulo probado**: `src/app/hooks/useCart.ts`
+**Módulo probado**: `src/hooks/useCart.ts`
 
 | Test | Descripción | Resultado |
 |---|---|---|
@@ -157,7 +162,7 @@ test: {
 
 ### 6. `useAuth.test.ts` — Hook de autenticación (8 tests)
 
-**Módulo probado**: `src/app/hooks/useAuth.ts`
+**Módulo probado**: `src/hooks/useAuth.ts`
 
 | Test | Descripción | Resultado |
 |---|---|---|
@@ -174,7 +179,7 @@ test: {
 
 ### 7. `KueskiBenefits.test.tsx` — Pantalla de bienvenida (6 tests)
 
-**Componente probado**: `src/app/components/KueskiBenefits.tsx`
+**Componente probado**: `src/components/KueskiBenefits.tsx`
 
 | Test | Descripción | Resultado |
 |---|---|---|
@@ -189,7 +194,7 @@ test: {
 
 ### 8. `AuthModal.test.tsx` — Modal de autenticación 2 pasos (13 tests)
 
-**Componente probado**: `src/app/components/AuthModal.tsx`
+**Componente probado**: `src/components/AuthModal.tsx`
 
 #### Paso 1: Identificación
 | Test | Descripción | Resultado |
@@ -216,9 +221,9 @@ test: {
 
 ---
 
-### 9. `PaymentSimulator.test.tsx` — Simulador de pagos (13 tests)
+### 9. `PaymentSimulator.test.tsx` — Simulador de pagos (12 tests)
 
-**Componente probado**: `src/app/components/PaymentSimulator.tsx`
+**Componente probado**: `src/components/PaymentSimulator.tsx`
 
 | Test | Descripción | Resultado |
 |---|---|---|
@@ -238,7 +243,47 @@ test: {
 
 ---
 
+### 10. `api.test.ts` — Cliente HTTP del frontend (9 tests)
+
+**Módulo probado**: `src/utils/api.ts` (con `fetch` mockeado)
+
+| Test | Descripción | Resultado |
+|---|---|---|
+| Token roundtrip | `setToken`/`getToken` persisten en `localStorage` (`kueski_token`) | ✅ |
+| Token: limpiar | `setToken(null)` borra el token | ✅ |
+| verifyOtp guarda token | Mockeando la respuesta, guarda el access token y devuelve el perfil | ✅ |
+| verifyOtp offline | Si `fetch` falla, devuelve `null` y no fija token | ✅ |
+| Cabecera Authorization | Adjunta `Bearer <token>` cuando hay sesión | ✅ |
+| Sin token | No adjunta `Authorization` si no hay sesión | ✅ |
+| Fallback: fetch falla | `fetchUser` devuelve `null` ante error de red | ✅ |
+| Fallback: respuesta no-ok | `fetchUser` devuelve `null` si `res.ok === false` | ✅ |
+| savePurchase no lanza | Resuelve sin error aunque el servidor falle | ✅ |
+| calculatePlans | Devuelve los planes personalizados del backend | ✅ |
+
+### 11. `server.test.ts` — Integración del backend (22 tests)
+
+**Módulo probado**: `server/server.js` (los 19 endpoints, con Supertest y DB temporal)
+
+| Grupo | Cobertura | Resultado |
+|---|---|---|
+| Health | `GET /api/health` responde `ok` | ✅ |
+| Autenticación | send-otp (200/400), verify-otp (tokens + 400), refresh-token (200/401) | ✅ |
+| Autorización | `GET /api/user` → 401 sin token, 200 con token; preferencias GET/PUT con merge | ✅ |
+| Score | sube de nivel y `levelChanged`; siguiente nivel; logro idempotente (200 → 409) | ✅ |
+| **Planes personalizados** | Bronce → [2,4]; Oro → [2,4,6,8] con comisión en 8; no aprueba si excede crédito | ✅ |
+| Compras | crear (201) + baja de crédito + historial; duplicado (409); detalle (404); cambio de estado | ✅ |
+| Cashback | acumula el cashback de las compras registradas | ✅ |
+| Deals | lista y marca el activo del sitio; suscribir a deal inexistente (404) | ✅ |
+
+> El test usa un `DB_FILE` temporal (variable de entorno) y re-siembra la base antes de cada prueba para aislar el estado.
+
+---
+
 ## Notas de implementación de pruebas
+
+### Mock de fetch (fallback offline)
+`test/setup.ts` reemplaza `global.fetch` por un mock que rechaza, simulando que el backend no está disponible. Así los tests de componentes/hooks ejercitan el fallback a `localStorage`. Los tests de `api.test.ts` sobreescriben el mock para simular respuestas concretas.
+
 
 ### Mock de localStorage
 Cada prueba opera sobre un `Map` en memoria que se reinicia antes de cada test (`beforeEach`). Esto garantiza aislamiento total entre pruebas sin tocar el localStorage real del navegador.

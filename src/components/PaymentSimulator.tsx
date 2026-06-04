@@ -32,6 +32,7 @@ export function PaymentSimulator({
   });
   const [approved, setApproved] = useState(true);
   const [rejectMessage, setRejectMessage] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
 
   const cashback = calculateCashback(cartTotal, userLevel);
@@ -54,7 +55,8 @@ export function PaymentSimulator({
     return () => { active = false; };
   }, [cartTotal]);
 
-  const handleConfirm = () => {
+  const handleFinalConfirm = () => {
+    setShowConfirm(false);
     setConfirmed(true);
     setTimeout(() => {
       onConfirm({
@@ -66,6 +68,58 @@ export function PaymentSimulator({
       });
     }, 1500);
   };
+
+  // Pantalla de confirmación previa
+  if (showConfirm) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="space-y-4"
+      >
+        <div className="text-center">
+          <h3 className="font-bold text-gray-900 text-lg">Confirmar compra</h3>
+          <p className="text-xs text-gray-500 mt-1">Revisa los detalles antes de continuar</p>
+        </div>
+
+        <div className="bg-gray-50 border border-gray-200 rounded-xl divide-y divide-gray-200">
+          <div className="flex items-center justify-between px-4 py-3">
+            <span className="text-sm text-gray-600">Tienda</span>
+            <span className="text-sm font-semibold text-gray-900">{siteName}</span>
+          </div>
+          <div className="flex items-center justify-between px-4 py-3">
+            <span className="text-sm text-gray-600">Total</span>
+            <span className="text-sm font-bold text-gray-900">{formatMXN(cartTotal)}</span>
+          </div>
+          <div className="flex items-center justify-between px-4 py-3">
+            <span className="text-sm text-gray-600">Plan</span>
+            <span className="text-sm font-semibold text-gray-900">
+              {selectedPlan.periods} quincenas x {formatMXN(selectedPlan.paymentPerPeriod)}
+            </span>
+          </div>
+          <div className="flex items-center justify-between px-4 py-3">
+            <span className="text-sm text-gray-600">Cashback estimado</span>
+            <span className="text-sm font-semibold text-emerald-600">{formatMXN(cashback)}</span>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowConfirm(false)}
+            className="flex-1 border border-gray-300 text-gray-700 py-3 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-colors"
+          >
+            Volver
+          </button>
+          <button
+            onClick={handleFinalConfirm}
+            className="flex-1 bg-emerald-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors"
+          >
+            Si, confirmar
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
 
   if (confirmed) {
     return (
@@ -156,7 +210,7 @@ export function PaymentSimulator({
           Cancelar
         </button>
         <button
-          onClick={handleConfirm}
+          onClick={() => setShowConfirm(true)}
           disabled={!approved}
           className="flex-1 bg-emerald-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
         >

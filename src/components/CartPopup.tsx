@@ -52,12 +52,19 @@ export function CartPopup({
               </button>
             </div>
 
-            {/* Resumen del carrito */}
+            {/* Resumen del carrito — deduplicar ítems detectados en múltiples nodos del DOM */}
             <div className="bg-gray-50 rounded-xl p-3 space-y-2 max-h-40 overflow-y-auto">
               {cartItems.length === 0 ? (
                 <p className="text-sm text-gray-500 text-center">El carrito está vacío</p>
               ) : (
-                cartItems.map((item) => (
+                cartItems
+                  .reduce<typeof cartItems>((acc, item) => {
+                    const found = acc.find(i => i.name === item.name && i.price === item.price);
+                    if (found) found.qty += item.qty;
+                    else acc.push({ ...item });
+                    return acc;
+                  }, [])
+                  .map((item) => (
                   <div key={item.id} className="flex items-center justify-between text-sm">
                     <span className="text-gray-700 truncate flex-1 mr-2">{item.name}</span>
                     <span className="text-gray-500 mr-2">x{item.qty}</span>

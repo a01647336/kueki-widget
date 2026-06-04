@@ -9,7 +9,7 @@ Documentación de todos los endpoints REST que requiere la versión funcional fi
 
 > **Multiusuario:** todos los endpoints de usuario operan sobre la cuenta del JWT (`req.userId`). Cada usuario ve y modifica únicamente **su** perfil, score, compras y cashback.
 >
-> Backend: **Express + MongoDB (Mongoose)**. Auth: **usuario/contraseña → JWT** (bcrypt + HS256).
+> Backend: **Express + PostgreSQL** (pg directo). Auth: **usuario/contraseña → JWT** (bcrypt + HS256).
 
 ---
 
@@ -197,7 +197,7 @@ Authorization: Bearer <accessToken>
 
 Devuelve la configuración personal del usuario: sitios desactivados y preferencias de notificaciones.
 
-> Implementado en el backend (persiste en `kueski_db.json`). El frontend además guarda una copia en `localStorage` (`kueski_prefs`) como fallback.
+> Implementado en el backend (persiste en `PostgreSQL (Aiven)`). El frontend además guarda una copia en `localStorage` (`kueski_prefs`) como fallback.
 
 **Response `200 OK`:**
 ```json
@@ -288,8 +288,8 @@ Devuelve el estado actual del programa de puntos: puntos acumulados, nivel, prog
   "nextLevel": "Plata",
   "achievements": [
     {
-      "id": "first-payment",
-      "title": "Primer pago a tiempo",
+      "id": "on-time-payment",
+      "title": "Realiza tu siguiente pago a tiempo",
       "completed": false,
       "points": 25
     },
@@ -307,7 +307,7 @@ Devuelve el estado actual del programa de puntos: puntos acumulados, nivel, prog
     },
     {
       "id": "referral",
-      "title": "Invita a un amigo",
+      "title": "Invita a un amigo y gana puntos",
       "completed": false,
       "points": 300
     }
@@ -420,8 +420,8 @@ Marca un logro como completado y otorga los puntos correspondientes. Idempotente
 {
   "ok": true,
   "achievement": {
-    "id": "first-payment",
-    "title": "Primer pago a tiempo",
+    "id": "on-time-payment",
+    "title": "Realiza tu siguiente pago a tiempo",
     "completed": true,
     "points": 25
   },
@@ -451,7 +451,7 @@ Authorization: Bearer <accessToken>
 
 Devuelve la lista de promociones activas. Opcionalmente filtra por sitio de e-commerce.
 
-> Implementado con auth. Datos en `kueski_db.json`.
+> Implementado con auth. Datos en `PostgreSQL (Aiven)`.
 
 **Query parameters:**
 
@@ -862,24 +862,24 @@ Verifica que el servidor esté activo. No requiere autenticación.
 
 | # | Método | Ruta | Estado |
 |---|--------|------|--------|
-| 1 | POST | `/api/auth/login` | ✅ Implementado |
+| 1 | POST | `/api/auth/login` | Implementado |
 | 2 | — | _(reemplaza al OTP anterior)_ | — |
-| 3 | POST | `/api/auth/logout` | ✅ Implementado |
-| 4 | POST | `/api/auth/refresh-token` | ✅ Implementado |
-| 5 | GET | `/api/user` | ✅ Implementado |
-| 6 | GET | `/api/user/score` | ✅ Implementado |
-| 7 | PUT | `/api/user/score` | ✅ Implementado |
-| 8 | POST | `/api/user/achievements/:achievementId/complete` | ✅ Implementado |
-| 9 | GET | `/api/user/preferences` | ✅ Implementado |
-| 10 | PUT | `/api/user/preferences` | ✅ Implementado |
-| 11 | GET | `/api/deals` | ✅ Implementado |
-| 12 | POST | `/api/deals/:dealId/subscribe` | ✅ Implementado |
-| 13 | POST | `/api/purchases/calculate-plans` | ✅ Implementado |
-| 14 | POST | `/api/purchases` | ✅ Implementado |
-| 15 | GET | `/api/purchases` | ✅ Implementado |
-| 16 | GET | `/api/purchases/:purchaseId` | ✅ Implementado |
-| 17 | PUT | `/api/purchases/:purchaseId/status` | ✅ Implementado |
-| 18 | GET | `/api/user/cashback` | ✅ Implementado |
-| 19 | GET | `/api/health` | ✅ Implementado |
+| 3 | POST | `/api/auth/logout` | Implementado |
+| 4 | POST | `/api/auth/refresh-token` | Implementado |
+| 5 | GET | `/api/user` | Implementado |
+| 6 | GET | `/api/user/score` | Implementado |
+| 7 | PUT | `/api/user/score` | Implementado |
+| 8 | POST | `/api/user/achievements/:achievementId/complete` | Implementado |
+| 9 | GET | `/api/user/preferences` | Implementado |
+| 10 | PUT | `/api/user/preferences` | Implementado |
+| 11 | GET | `/api/deals` | Implementado |
+| 12 | POST | `/api/deals/:dealId/subscribe` | Implementado |
+| 13 | POST | `/api/purchases/calculate-plans` | Implementado |
+| 14 | POST | `/api/purchases` | Implementado |
+| 15 | GET | `/api/purchases` | Implementado |
+| 16 | GET | `/api/purchases/:purchaseId` | Implementado |
+| 17 | PUT | `/api/purchases/:purchaseId/status` | Implementado |
+| 18 | GET | `/api/user/cashback` | Implementado |
+| 19 | GET | `/api/health` | Implementado |
 
 > **Estado:** los 19 endpoints están implementados en `server/server.js` y cubiertos por pruebas de integración (`test/server.test.ts`). Todos requieren `Authorization: Bearer <accessToken>` salvo los de autenticación y health.

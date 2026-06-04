@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { ShoppingCart, CheckCircle, AlertCircle, LogIn } from 'lucide-react';
+import { ShoppingCart, CheckCircle, AlertCircle, LogIn, Bell } from 'lucide-react';
 import type { LevelName, Purchase } from '../types';
 import { PaymentSimulator } from './PaymentSimulator';
 import { COMPATIBLE_SITES, SITE_DISPLAY_NAMES } from '../constants/kueski';
@@ -11,6 +11,7 @@ interface SmartReminderProps {
   cartTotal: number;
   userLevel: LevelName;
   showSimulator: boolean;
+  nextPayment?: { date: string; amount: number };
   onOpenSimulator: () => void;
   onCloseSimulator: () => void;
   onConfirmPurchase: (purchase: Omit<Purchase, 'id' | 'date' | 'status'>) => void;
@@ -19,12 +20,22 @@ interface SmartReminderProps {
 
 const COMPATIBLE_SITE_LIST = COMPATIBLE_SITES as readonly string[];
 
+/** Devuelve los días que faltan para una fecha (negativo si ya pasó). */
+function daysUntil(dateStr: string): number {
+  const now = new Date();
+  const target = new Date(dateStr);
+  now.setHours(0, 0, 0, 0);
+  target.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - now.getTime()) / 86_400_000);
+}
+
 export function SmartReminder({
   currentSite,
   isLoggedIn,
   cartTotal,
   userLevel,
   showSimulator,
+  nextPayment,
   onOpenSimulator,
   onCloseSimulator,
   onConfirmPurchase,
@@ -32,6 +43,9 @@ export function SmartReminder({
 }: SmartReminderProps) {
   const isEcommerce = COMPATIBLE_SITE_LIST.includes(currentSite);
   const siteName = SITE_DISPLAY_NAMES[currentSite] ?? currentSite;
+
+  const daysLeft = nextPayment ? daysUntil(nextPayment.date) : null;
+  const showPaymentReminder = isLoggedIn && daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
 
   if (showSimulator && cartTotal > 0) {
     return (
@@ -47,6 +61,32 @@ export function SmartReminder({
 
   return (
     <div className="space-y-4">
+      {/* Recordatorio de pago próximo */}
+      {showPaymentReminder && nextPayment && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={`rounded-xl p-3 flex items-start gap-3 border ${
+            daysLeft! <= 3
+              ? 'bg-amber-50 border-amber-300'
+              : 'bg-blue-50 border-blue-200'
+          }`}
+        >
+          <Bell className={`w-4 h-4 shrink-0 mt-0.5 ${daysLeft! <= 3 ? 'text-amber-500' : 'text-blue-500'}`} />
+          <div>
+            <p className={`text-xs font-semibold ${daysLeft! <= 3 ? 'text-amber-800' : 'text-blue-800'}`}>
+              {daysLeft === 0
+                ? 'Tu pago vence hoy'
+                : `Tu pago vence en ${daysLeft} ${daysLeft === 1 ? 'día' : 'días'}`}
+            </p>
+            <p className={`text-xs mt-0.5 ${daysLeft! <= 3 ? 'text-amber-700' : 'text-blue-700'}`}>
+              {formatMXN(nextPayment.amount)} el{' '}
+              {new Date(nextPayment.date).toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })}
+            </p>
+          </div>
+        </motion.div>
+      )}
+
       {/* Bloque principal según contexto */}
       {isEcommerce ? (
         <motion.div
@@ -60,7 +100,7 @@ export function SmartReminder({
             </div>
             <div className="flex-1 min-w-0">
               <h3 className="font-bold text-gray-900 mb-1">
-                ¡Divide tu pago en quincenas!
+                Divide tu pago en quincenas
               </h3>
               <p className="text-sm text-gray-700 mb-3">
                 Usa <span className="font-semibold text-emerald-600">Kueski Pay</span> y paga tu compra sin intereses en {siteName}.
@@ -107,9 +147,9 @@ export function SmartReminder({
         </motion.div>
       )}
 
-      {/* Cómo funciona */}
+      {/* Como funciona */}
       <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-        <h4 className="font-semibold text-gray-900 text-sm">¿Cómo funciona Kueski Pay?</h4>
+        <h4 className="font-semibold text-gray-900 text-sm">Como funciona Kueski Pay</h4>
         <div className="space-y-2">
           {[
             'Divide tu compra en 2, 4 o más pagos quincenales',

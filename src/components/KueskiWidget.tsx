@@ -11,7 +11,6 @@ import { KueskiPayLogo } from './KueskiPayLogo';
 import type { User, Purchase, CartItem } from '../types';
 import type { ApiUser } from '../utils/api';
 import type { useScore } from '../hooks/useScore';
-import { storage } from '../utils/storage';
 import { formatMXN } from '../utils/payments';
 
 type TabType = 'reminder' | 'score' | 'deals';
@@ -63,11 +62,6 @@ export function KueskiWidget({
   const [isMinimized, setIsMinimized] = useState(false);
   const [activeTab, setActiveTab]     = useState<TabType>('reminder');
   const [showSimulator, setShowSimulator] = useState(false);
-  const [disabledSites, setDisabledSites] = useState<string[]>(
-    () => storage.getPrefs().disabledSites
-  );
-
-  const siteEnabled = !disabledSites.includes(currentSite);
 
   // Sync external simulator trigger from CartPopup
   useEffect(() => {
@@ -84,20 +78,12 @@ export function KueskiWidget({
     onSimulatorClose();
   }, [onSimulatorClose]);
 
-  const handleToggleSite = useCallback(() => {
-    setDisabledSites((prev) => {
-      const next = prev.includes(currentSite)
-        ? prev.filter((s) => s !== currentSite)
-        : [...prev, currentSite];
-      storage.setPrefs({ disabledSites: next });
-      return next;
-    });
-  }, [currentSite]);
-
   const handleCloseSimulator = useCallback(() => {
     setShowSimulator(false);
     onSimulatorClose();
   }, [onSimulatorClose]);
+
+
 
   if (!isOpen) return null;
 
@@ -246,6 +232,7 @@ export function KueskiWidget({
                       cartTotal={cartTotal}
                       userLevel={score.level}
                       showSimulator={showSimulator}
+                      nextPayment={user?.nextPayment}
                       onOpenSimulator={() => setShowSimulator(true)}
                       onCloseSimulator={handleCloseSimulator}
                       onConfirmPurchase={onConfirmPurchase}
@@ -267,8 +254,6 @@ export function KueskiWidget({
                       user={user}
                       currentSite={currentSite}
                       purchases={purchases}
-                      siteEnabled={siteEnabled}
-                      onToggleSite={handleToggleSite}
                       onLogout={onLogout}
                     />
                   </motion.div>

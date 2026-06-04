@@ -8,7 +8,7 @@ interface ScoreCoachProps {
 }
 
 export function ScoreCoach({ score }: ScoreCoachProps) {
-  const { points, level, achievements, addPoints, completeAchievement, nextLevelThreshold } = score;
+  const { points, level, achievements, nextLevelThreshold } = score;
 
   const currentLevelIdx = LEVEL_ORDER.indexOf(level);
   const prevThreshold   = LEVEL_THRESHOLDS[level];
@@ -26,7 +26,6 @@ export function ScoreCoach({ score }: ScoreCoachProps) {
   const tips = [
     'Paga siempre a tiempo para subir de nivel más rápido',
     'Usa Kueski Pay regularmente para ganar puntos extra',
-    'Completa tu perfil para desbloquear beneficios',
   ];
 
   return (
@@ -113,36 +112,31 @@ export function ScoreCoach({ score }: ScoreCoachProps) {
         </h4>
         <div className="space-y-2">
           {achievements.map((achievement) => (
-            <button
+            <div
               key={achievement.id}
-              onClick={() => !achievement.completed && completeAchievement(achievement.id)}
-              className={`w-full flex items-center justify-between p-2 rounded-lg border transition-all text-left ${
+              className={`w-full flex items-center justify-between p-2 rounded-lg border ${
                 achievement.completed
-                  ? 'bg-emerald-50 border-emerald-200 cursor-default'
-                  : 'bg-gray-50 border-gray-200 hover:border-emerald-300 hover:bg-emerald-50 cursor-pointer'
+                  ? 'bg-emerald-50 border-emerald-200'
+                  : 'bg-gray-50 border-gray-200'
               }`}
             >
               <div className="flex items-center gap-2">
                 <div className={`rounded-full p-1 ${achievement.completed ? 'bg-emerald-500' : 'bg-gray-300'}`}>
-                  <CheckCircle className={`w-3 h-3 ${achievement.completed ? 'text-white' : 'text-gray-500'}`} />
+                  {achievement.completed
+                    ? <CheckCircle className="w-3 h-3 text-white" />
+                    : <Lock className="w-3 h-3 text-gray-500" />
+                  }
                 </div>
-                <span className={`text-xs ${achievement.completed ? 'text-gray-900' : 'text-gray-500'}`}>
+                <span className={`text-xs ${achievement.completed ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
                   {achievement.title}
                 </span>
               </div>
               <span className={`text-xs font-semibold shrink-0 ${achievement.completed ? 'text-emerald-600' : 'text-gray-400'}`}>
                 +{achievement.points} pts
               </span>
-            </button>
+            </div>
           ))}
         </div>
-
-        <button
-          onClick={() => addPoints(25)}
-          className="mt-3 w-full text-xs text-emerald-600 font-semibold py-2 border border-emerald-200 rounded-lg hover:bg-emerald-50 transition-colors"
-        >
-          + Simular pago a tiempo (+25 pts)
-        </button>
       </div>
 
       {/* Tips */}

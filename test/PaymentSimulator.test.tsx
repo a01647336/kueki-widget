@@ -64,10 +64,23 @@ describe('PaymentSimulator', () => {
     expect(onClose).toHaveBeenCalledOnce();
   });
 
+  it('muestra pantalla de confirmacion al dar clic en Confirmar', async () => {
+    render(<PaymentSimulator {...DEFAULT_PROPS} />);
+    fireEvent.click(screen.getByRole('button', { name: /Confirmar con Kueski Pay/i }));
+    await waitFor(() => {
+      expect(screen.getByText(/Confirmar compra/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Si, confirmar/i })).toBeInTheDocument();
+    });
+  });
+
   it('llama a onConfirm con los datos correctos al confirmar', async () => {
     const onConfirm = vi.fn();
     render(<PaymentSimulator {...DEFAULT_PROPS} onConfirm={onConfirm} />);
+    // Paso 1: abrir confirmación
     fireEvent.click(screen.getByRole('button', { name: /Confirmar con Kueski Pay/i }));
+    await waitFor(() => screen.getByRole('button', { name: /Si, confirmar/i }));
+    // Paso 2: confirmar definitivamente
+    fireEvent.click(screen.getByRole('button', { name: /Si, confirmar/i }));
     await waitFor(() => {
       expect(onConfirm).toHaveBeenCalledOnce();
       const call = onConfirm.mock.calls[0][0];
@@ -77,11 +90,13 @@ describe('PaymentSimulator', () => {
     }, { timeout: 2500 });
   });
 
-  it('muestra pantalla de éxito después de confirmar', async () => {
+  it('muestra pantalla de exito despues de confirmar', async () => {
     render(<PaymentSimulator {...DEFAULT_PROPS} />);
     fireEvent.click(screen.getByRole('button', { name: /Confirmar con Kueski Pay/i }));
+    await waitFor(() => screen.getByRole('button', { name: /Si, confirmar/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Si, confirmar/i }));
     await waitFor(() => {
-      expect(screen.getByText(/¡Compra confirmada!/i)).toBeInTheDocument();
+      expect(screen.getByText(/Compra confirmada/i)).toBeInTheDocument();
     }, { timeout: 2500 });
   });
 

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import { LogOut, History, ToggleLeft, ToggleRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { LogOut, History, ChevronDown, ChevronUp } from 'lucide-react';
 import type { User, Purchase } from '../types';
-import { LEVEL_COLORS, SITE_DISPLAY_NAMES } from '../constants/kueski';
+import { LEVEL_COLORS } from '../constants/kueski';
 import { formatMXN } from '../utils/payments';
 import { PurchaseHistory } from './PurchaseHistory';
 
@@ -10,8 +10,6 @@ interface UserProfileProps {
   user: User;
   currentSite: string;
   purchases: Purchase[];
-  siteEnabled: boolean;
-  onToggleSite: () => void;
   onLogout: () => void;
 }
 
@@ -19,12 +17,9 @@ export function UserProfile({
   user,
   currentSite,
   purchases,
-  siteEnabled,
-  onToggleSite,
   onLogout,
 }: UserProfileProps) {
   const [showHistory, setShowHistory] = useState(false);
-  const siteName = SITE_DISPLAY_NAMES[currentSite] ?? currentSite;
   const levelGradient = LEVEL_COLORS[user.level];
 
   return (
@@ -73,21 +68,6 @@ export function UserProfile({
 
       <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 text-xs text-emerald-700 font-semibold">
         Tu cashback: {(user.cashbackRate * 100).toFixed(1)}% en tiendas compatibles
-      </div>
-
-      {/* Toggle de notificaciones */}
-      <div className="bg-white border border-gray-200 rounded-xl p-3 flex items-center justify-between">
-        <div>
-          <p className="text-sm font-semibold text-gray-800">Widget en {siteName}</p>
-          <p className="text-xs text-gray-500">{siteEnabled ? 'Activo en este sitio' : 'Desactivado en este sitio'}</p>
-        </div>
-        <button onClick={onToggleSite} className="transition-colors">
-          {siteEnabled ? (
-            <ToggleRight className="w-8 h-8 text-emerald-500" />
-          ) : (
-            <ToggleLeft className="w-8 h-8 text-gray-300" />
-          )}
-        </button>
       </div>
 
       {/* Historial */}

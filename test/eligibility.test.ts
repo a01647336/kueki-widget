@@ -108,16 +108,18 @@ describe('calculate-plans / purchases — rechazos vía API', () => {
   });
 
   it('límite de compras activas: la 6ª compra se rechaza', async () => {
+    // diego ya tiene 2 compras activas del seed (seed_diego_1, seed_diego_2).
+    // Agregamos 3 más para llegar al máximo de 5 activas, y la siguiente es rechazada.
     const token = await loginAs('diego');
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 3; i++) {
       const ok = await request(app).post('/api/purchases').set('Authorization', `Bearer ${token}`)
         .send({ id: `p_diego_${i}`, site: 'amazon', amount: 200, plan: 2 });
       expect(ok.status).toBe(201);
     }
-    const sixth = await request(app).post('/api/purchases').set('Authorization', `Bearer ${token}`)
-      .send({ id: 'p_diego_6', site: 'amazon', amount: 200, plan: 2 });
-    expect(sixth.status).toBe(422);
-    expect(sixth.body.reason).toBe('LIMITE_COMPRAS_ACTIVAS');
+    const rejected = await request(app).post('/api/purchases').set('Authorization', `Bearer ${token}`)
+      .send({ id: 'p_diego_extra', site: 'amazon', amount: 200, plan: 2 });
+    expect(rejected.status).toBe(422);
+    expect(rejected.body.reason).toBe('LIMITE_COMPRAS_ACTIVAS');
   });
 
   it('monto inválido (menor a $50) devuelve 422', async () => {

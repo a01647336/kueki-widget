@@ -1,0 +1,94 @@
+/* Fuente Inter desde Google Fonts (funciona desde shadow root) */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   :host — variables del widget Kueski en el Shadow DOM
+   ============================================================
+   El widget de Plasmo vive en un Shadow DOM. Las propiedades CSS
+   heredables (color, font-family, line-height, letter-spacing,
+   etc.) cruzan el límite del shadow root por especificación.
+   Aplicamos `all: initial` para CORTAR esa herencia desde el sitio
+   host, y luego redeclaramos lo necesario con valores controlados.
+   ============================================================ */
+:host {
+  /* Reset agresivo: corta toda herencia del sitio host */
+  all: initial;
+
+  /* Volver a un baseline conocido */
+  display: block;
+  box-sizing: border-box;
+  font-family: "Inter", system-ui, -apple-system, sans-serif;
+  font-size: 16px;
+  font-weight: 400;
+  font-style: normal;
+  font-variant: normal;
+  line-height: 1.5;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-align: left;
+  text-transform: none;
+  text-decoration: none;
+  direction: ltr;
+  cursor: auto;
+
+  /* Variables semánticas del widget — prefijo --k- para que
+     ningún sitio pueda pisarlas accidentalmente. */
+  --k-background: #ffffff;
+  --k-foreground: #111827;
+  --k-card: #ffffff;
+  --k-card-foreground: #111827;
+  --k-popover: #ffffff;
+  --k-popover-foreground: #111827;
+  --k-primary: #030B64;
+  --k-primary-foreground: #ffffff;
+  --k-secondary: #f1f2f5;
+  --k-secondary-foreground: #030B64;
+  --k-muted: #ececf0;
+  --k-muted-foreground: #717182;
+  --k-accent: #e9ebef;
+  --k-accent-foreground: #030B64;
+  --k-destructive: #d4183d;
+  --k-destructive-foreground: #ffffff;
+  --k-border: rgba(0, 0, 0, 0.1);
+  --k-input: rgba(0, 0, 0, 0.1);
+  --k-input-background: #f3f3f5;
+  --k-switch-background: #cbced4;
+  --k-ring: #9FBFFA;
+  --k-radius: 0.625rem;
+
+  color: var(--k-foreground);
+}
+
+@layer base {
+  /* Todos los elementos dentro del shadow root */
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    border-color: var(--k-border);
+  }
+
+  /* Tipografía base dentro del widget */
+  h1 { font-size: 1.5rem; font-weight: 500; line-height: 1.5; }
+  h2 { font-size: 1.25rem; font-weight: 500; line-height: 1.5; }
+  h3 { font-size: 1.125rem; font-weight: 500; line-height: 1.5; }
+  h4 { font-size: 1rem; font-weight: 500; line-height: 1.5; }
+
+  label,
+  button {
+    font-weight: 500;
+    line-height: 1.5;
+  }
+
+  input,
+  textarea,
+  select {
+    font-family: inherit;
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+}

@@ -17,11 +17,26 @@ let _pool = null;
 
 /** Crea un pool nuevo (útil en tests para inyectar pg-mem). */
 function createPool(connectionString) {
+  const isLocal = !connectionString ||
+    connectionString.includes('localhost') ||
+    connectionString.includes('127.0.0.1');
+
+  if (isLocal) {
+    return new Pool({ connectionString, ssl: false });
+  }
+
+  // Para conexiones remotas (Aiven, etc.) quitamos sslmode de la URL y
+  // manejamos SSL explícitamente con rejectUnauthorized:false.
+  // Esto evita que pg v8+ interprete sslmode=require como verify-full.
+  const cleanUrl = connectionString
+    .replace(/[?&]sslmode=[^&]*/g, '')
+    .replace(/\?$/, '')
+    .replace(/&&/, '&')
+    .replace(/\?&/, '?');
+
   return new Pool({
-    connectionString,
-    ssl: connectionString && !connectionString.startsWith('postgres://localhost')
-      ? { rejectUnauthorized: false }
-      : false,
+    connectionString: cleanUrl,
+    ssl: { rejectUnauthorized: false },
   });
 }
 

@@ -1,32 +1,36 @@
 /**
- * server.test.ts — Integración del backend (Express + Mongoose) con
- * MongoDB en memoria (mongodb-memory-server). Re-siembra antes de cada test.
+ * server.test.ts — Integración del backend (Express + PostgreSQL) con
+ * pg-mem (base de datos en memoria compatible con pg). Re-siembra antes de cada test.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { createRequire } from 'module';
 import request from 'supertest';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { newDb } from 'pg-mem';
 
 const require = createRequire(import.meta.url);
-const { app } = require('../server/server.js');
-const { connectDB, disconnectDB, User, Purchase, Deal } = require('../server/lib/db');
+const { app, setPool } = require('../server/server.js');
+const { initSchema } = require('../server/lib/db');
 const { seedDatabase } = require('../server/lib/seed');
 
-let mem: InstanceType<typeof MongoMemoryServer>;
+let pool: ReturnType<ReturnType<typeof newDb>['adapters']['createPg']>['Pool'] extends new () => infer P ? P : never;
 
 beforeAll(async () => {
-  mem = await MongoMemoryServer.create();
-  await connectDB(mem.getUri());
-}, 60000);
+  const db = newDb();
+  const { Pool } = db.adapters.createPg();
+  pool = new (Pool as any)();
+  await initSchema(pool);
+  setPool(pool);
+}, 30000);
 
 afterAll(async () => {
-  await disconnectDB();
-  await mem.stop();
+  await (pool as any).end?.();
 });
 
 beforeEach(async () => {
-  await Promise.all([User.deleteMany({}), Purchase.deleteMany({}), Deal.deleteMany({})]);
-  await seedDatabase();
+  await (pool as any).query('DELETE FROM purchases');
+  await (pool as any).query('DELETE FROM users');
+  await (pool as any).query('DELETE FROM deals');
+  await seedDatabase(pool);
 });
 
 async function loginAs(username: string): Promise<string> {
@@ -75,10 +79,10 @@ describe('Usuario y autorización', () => {
   });
 
   it('cada usuario obtiene su propio perfil', async () => {
-    const tokenAna = await loginAs('ana');
-    const tokenDiego = await loginAs('diego');
-    const ana = await request(app).get('/api/user').set('Authorization', `Bearer ${tokenAna}`);
-    const diego = await request(app).get('/api/user').set('Authorization', `Bearer ${tokenDiego}`);
+    const tokenAna  = await loginAs('ana');
+    const tokenDiego= await loginAs('diego');
+    const ana  = await request(app).get('/api/user').set('Authorization', `Bearer ${tokenAna}`);
+    const diego= await request(app).get('/api/user').set('Authorization', `Bearer ${tokenDiego}`);
     expect(ana.body.level).toBe('Plata');
     expect(diego.body.level).toBe('Oro');
     expect(ana.body.id).not.toBe(diego.body.id);
@@ -111,7 +115,7 @@ describe('Score y gamificación', () => {
 
   it('completar un logro otorga puntos y es idempotente (409)', async () => {
     const token = await loginAs('carlos');
-    const first = await request(app).post('/api/user/achievements/referral/complete').set('Authorization', `Bearer ${token}`);
+    const first  = await request(app).post('/api/user/achievements/referral/complete').set('Authorization', `Bearer ${token}`);
     expect(first.status).toBe(200);
     expect(first.body.pointsAwarded).toBe(300);
     const second = await request(app).post('/api/user/achievements/referral/complete').set('Authorization', `Bearer ${token}`);
@@ -122,14 +126,16 @@ describe('Score y gamificación', () => {
 describe('Planes personalizados por nivel', () => {
   it('Bronce (carlos) recibe planes de 2 y 4 quincenas', async () => {
     const token = await loginAs('carlos');
-    const res = await request(app).post('/api/purchases/calculate-plans').set('Authorization', `Bearer ${token}`).send({ cartTotal: 1500 });
+    const res = await request(app).post('/api/purchases/calculate-plans')
+      .set('Authorization', `Bearer ${token}`).send({ cartTotal: 1500 });
     expect(res.body.approved).toBe(true);
     expect(res.body.plans.map((p: { periods: number }) => p.periods)).toEqual([2, 4]);
   });
 
   it('Oro (diego) recibe hasta 8 quincenas con comisión en la de 8', async () => {
     const token = await loginAs('diego');
-    const res = await request(app).post('/api/purchases/calculate-plans').set('Authorization', `Bearer ${token}`).send({ cartTotal: 5000 });
+    const res = await request(app).post('/api/purchases/calculate-plans')
+      .set('Authorization', `Bearer ${token}`).send({ cartTotal: 5000 });
     expect(res.body.plans.map((p: { periods: number }) => p.periods)).toEqual([2, 4, 6, 8]);
     expect(res.body.plans.find((p: { periods: number }) => p.periods === 8).commissionRate).toBe(0.015);
   });
@@ -137,20 +143,20 @@ describe('Planes personalizados por nivel', () => {
 
 describe('Compras y aislamiento por usuario', () => {
   it('una compra de un usuario no aparece en el historial de otro', async () => {
-    const tokenAna = await loginAs('ana');
+    const tokenAna  = await loginAs('ana');
+    const tokenDiego= await loginAs('diego');
+
     await request(app).post('/api/purchases').set('Authorization', `Bearer ${tokenAna}`)
       .send({ id: 'p_ana_1', site: 'amazon', amount: 1000, plan: 4 });
 
-    const histAna = await request(app).get('/api/purchases').set('Authorization', `Bearer ${tokenAna}`);
+    const histAna  = await request(app).get('/api/purchases').set('Authorization', `Bearer ${tokenAna}`);
+    const histDiego= await request(app).get('/api/purchases').set('Authorization', `Bearer ${tokenDiego}`);
     expect(histAna.body.find((p: { id: string }) => p.id === 'p_ana_1')).toBeTruthy();
-
-    const tokenDiego = await loginAs('diego');
-    const histDiego = await request(app).get('/api/purchases').set('Authorization', `Bearer ${tokenDiego}`);
     expect(histDiego.body.find((p: { id: string }) => p.id === 'p_ana_1')).toBeFalsy();
   });
 
   it('registrar una compra baja el crédito del usuario', async () => {
-    const token = await loginAs('ana');
+    const token  = await loginAs('ana');
     const before = await request(app).get('/api/user').set('Authorization', `Bearer ${token}`);
     await request(app).post('/api/purchases').set('Authorization', `Bearer ${token}`)
       .send({ id: 'p_ana_2', site: 'amazon', amount: 1000, plan: 4 });

@@ -1,23 +1,23 @@
 /**
  * server.js — Backend del Kueski Smart Widget (versión final multiusuario)
  *
- * - Base de datos: MongoDB (Mongoose) — ver lib/db.js
+ * - Base de datos: PostgreSQL (Aiven) vía driver `pg` — ver lib/db.js
  * - Auth: usuario + contraseña (bcrypt) → JWT HS256 (lib/jwt.js)
  * - Reglas y elegibilidad: lib/rules.js
  * - Cada endpoint opera sobre el usuario autenticado (req.userId).
  *
- * Env: MONGODB_URI, JWT_SECRET, PORT (default 3001), NODE_ENV.
+ * Env: DATABASE_URL, JWT_SECRET, PORT (default 3001), NODE_ENV.
  * Documentación de endpoints en docs/endpoints.md.
  */
 
 const express = require('express');
-const cors = require('cors');
-const bcrypt = require('bcryptjs');
+const cors    = require('cors');
+const bcrypt  = require('bcryptjs');
 
-const rules = require('./lib/rules');
+const rules                               = require('./lib/rules');
 const { issueTokens, verify, authMiddleware } = require('./lib/jwt');
-const { connectDB, User, Purchase, Deal } = require('./lib/db');
-const { seedDatabase } = require('./lib/seed');
+const { connectDB, getPool, setPool, initSchema } = require('./lib/db');
+const { seedDatabase }                    = require('./lib/seed');
 
 const PORT = process.env.PORT || 3001;
 
@@ -25,64 +25,70 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Envuelve handlers async y centraliza el manejo de errores.
-const h = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((err) => {
-  console.error(err);
-  res.status(500).json({ error: 'Error interno del servidor' });
-});
+// Expone setPool para que los tests inyecten su pool de pg-mem.
+app.setPool = setPool;
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Envoltura async + manejo centralizado de errores ─────────────────────────
+const h = (fn) => (req, res) =>
+  Promise.resolve(fn(req, res)).catch((err) => {
+    console.error(err);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  });
 
-/** Aplica beneficios de nivel (cashback y crédito) según los puntos. */
-function applyLevel(user) {
-  const benefits = rules.levelBenefits(user.level);
-  user.cashbackRate = benefits.cashbackRate;
-  user.creditLimit = benefits.creditLimit.max;
+// ─── Helpers de serialización JSON ───────────────────────────────────────────
+
+function parseArr(v) { try { return JSON.parse(v || '[]'); } catch { return []; } }
+
+/** Convierte una fila de la tabla `users` al perfil público de la API. */
+function publicUser(u) {
+  return {
+    id:             u.id,
+    name:           u.name,
+    username:       u.username,
+    email:          u.username,
+    level:          u.level,
+    creditLimit:    u.credit_limit,
+    availableCredit:u.available_credit,
+    cashbackRate:   u.cashback_rate,
+    score:          u.score_points,
+    nextPayment: { date: u.next_payment_date, amount: u.next_payment_amount },
+  };
 }
 
-/** Perfil público del usuario para las respuestas de la API. */
-function publicUser(user) {
-  return {
-    id: user._id.toString(),
-    name: user.name,
-    username: user.username,
-    email: user.username,
-    level: user.level,
-    creditLimit: user.creditLimit,
-    availableCredit: user.availableCredit,
-    cashbackRate: user.cashbackRate,
-    score: user.scorePoints,
-    nextPayment: user.nextPayment,
-  };
+/** Aplica beneficios de nivel (cashback y crédito máximo) a los campos de la fila. */
+function benefitsForLevel(level) {
+  const b = rules.levelBenefits(level);
+  return { cashback_rate: b.cashbackRate, credit_limit: b.creditLimit.max };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
 //  1. AUTENTICACIÓN
 // ════════════════════════════════════════════════════════════════════════════
 
-/** POST /api/auth/login — Usuario + contraseña → tokens + perfil. */
+/** POST /api/auth/login — usuario + contraseña → tokens + perfil */
 app.post('/api/auth/login', h(async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: 'Se requieren usuario y contraseña' });
   }
-  const user = await User.findOne({ username: String(username).toLowerCase().trim() });
-  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+  const pool = getPool();
+  const { rows } = await pool.query('SELECT * FROM users WHERE username=$1', [String(username).toLowerCase().trim()]);
+  const user = rows[0];
+  if (!user || !(await bcrypt.compare(password, user.password_hash))) {
     return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
   }
-  const tokens = issueTokens(user._id.toString());
+  const tokens = issueTokens(user.id);
   res.json({ ...tokens, user: publicUser(user) });
 }));
 
-/** POST /api/auth/logout — Cierra sesión (sin estado en el server). */
+/** POST /api/auth/logout */
 app.post('/api/auth/logout', authMiddleware, (_req, res) => {
   res.json({ ok: true });
 });
 
-/** POST /api/auth/refresh-token — Renueva el access token. */
+/** POST /api/auth/refresh-token */
 app.post('/api/auth/refresh-token', (req, res) => {
-  const { refreshToken } = req.body || {};
-  const payload = verify(refreshToken);
+  const payload = verify((req.body || {}).refreshToken);
   if (!payload || payload.type !== 'refresh') {
     return res.status(401).json({ error: 'Refresh token inválido o expirado' });
   }
@@ -95,30 +101,42 @@ app.post('/api/auth/refresh-token', (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 
 app.get('/api/user', authMiddleware, h(async (req, res) => {
-  const user = await User.findById(req.userId);
-  if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-  res.json(publicUser(user));
+  const pool = getPool();
+  const { rows } = await pool.query('SELECT * FROM users WHERE id=$1', [req.userId]);
+  if (!rows[0]) return res.status(404).json({ error: 'Usuario no encontrado' });
+  res.json(publicUser(rows[0]));
 }));
 
 app.get('/api/user/preferences', authMiddleware, h(async (req, res) => {
-  const user = await User.findById(req.userId);
-  res.json(user.preferences);
+  const pool = getPool();
+  const { rows } = await pool.query(
+    'SELECT disabled_sites, notif_deals, notif_reminders FROM users WHERE id=$1',
+    [req.userId]
+  );
+  const u = rows[0];
+  res.json({ disabledSites: parseArr(u.disabled_sites), notifications: { deals: u.notif_deals, reminders: u.notif_reminders } });
 }));
 
 app.put('/api/user/preferences', authMiddleware, h(async (req, res) => {
+  const pool = getPool();
   const { disabledSites, notifications } = req.body || {};
-  const user = await User.findById(req.userId);
-  if (disabledSites !== undefined) {
-    if (!Array.isArray(disabledSites)) {
-      return res.status(400).json({ error: 'disabledSites debe ser un arreglo' });
-    }
-    user.preferences.disabledSites = disabledSites;
+  const { rows } = await pool.query('SELECT * FROM users WHERE id=$1', [req.userId]);
+  const u = rows[0];
+
+  const newSites = disabledSites !== undefined
+    ? (Array.isArray(disabledSites) ? JSON.stringify(disabledSites) : u.disabled_sites)
+    : u.disabled_sites;
+  if (disabledSites !== undefined && !Array.isArray(disabledSites)) {
+    return res.status(400).json({ error: 'disabledSites debe ser un arreglo' });
   }
-  if (notifications !== undefined) {
-    user.preferences.notifications = { ...user.preferences.notifications, ...notifications };
-  }
-  await user.save();
-  res.json({ ok: true, preferences: user.preferences });
+  const newDeals    = notifications?.deals    !== undefined ? notifications.deals    : u.notif_deals;
+  const newReminders= notifications?.reminders !== undefined ? notifications.reminders : u.notif_reminders;
+
+  await pool.query(
+    'UPDATE users SET disabled_sites=$1, notif_deals=$2, notif_reminders=$3 WHERE id=$4',
+    [newSites, newDeals, newReminders, req.userId]
+  );
+  res.json({ ok: true, preferences: { disabledSites: parseArr(newSites), notifications: { deals: newDeals, reminders: newReminders } } });
 }));
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -126,15 +144,11 @@ app.put('/api/user/preferences', authMiddleware, h(async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 
 app.get('/api/user/score', authMiddleware, h(async (req, res) => {
-  const user = await User.findById(req.userId);
-  const { nextLevel, pointsToNextLevel } = rules.nextLevelInfo(user.scorePoints);
-  res.json({
-    points: user.scorePoints,
-    level: user.level,
-    pointsToNextLevel,
-    nextLevel,
-    achievements: user.achievements,
-  });
+  const pool = getPool();
+  const { rows } = await pool.query('SELECT score_points, level, achievements FROM users WHERE id=$1', [req.userId]);
+  const u = rows[0];
+  const { nextLevel, pointsToNextLevel } = rules.nextLevelInfo(u.score_points);
+  res.json({ points: u.score_points, level: u.level, pointsToNextLevel, nextLevel, achievements: parseArr(u.achievements) });
 }));
 
 app.put('/api/user/score', authMiddleware, h(async (req, res) => {
@@ -142,27 +156,37 @@ app.put('/api/user/score', authMiddleware, h(async (req, res) => {
   if (typeof points !== 'number' || points < 0) {
     return res.status(400).json({ error: 'Se requiere { points: number } positivo' });
   }
-  const user = await User.findById(req.userId);
-  const prevLevel = user.level;
-  user.scorePoints = points;
-  user.level = rules.computeLevel(points);
-  applyLevel(user);
-  await user.save();
-  res.json({ ok: true, points: user.scorePoints, level: user.level, levelChanged: user.level !== prevLevel });
+  const pool = getPool();
+  const { rows } = await pool.query('SELECT level FROM users WHERE id=$1', [req.userId]);
+  const prevLevel = rows[0].level;
+  const newLevel  = rules.computeLevel(points);
+  const b         = benefitsForLevel(newLevel);
+  await pool.query(
+    'UPDATE users SET score_points=$1, level=$2, cashback_rate=$3, credit_limit=$4 WHERE id=$5',
+    [points, newLevel, b.cashback_rate, b.credit_limit, req.userId]
+  );
+  res.json({ ok: true, points, level: newLevel, levelChanged: newLevel !== prevLevel });
 }));
 
 app.post('/api/user/achievements/:achievementId/complete', authMiddleware, h(async (req, res) => {
-  const user = await User.findById(req.userId);
-  const achievement = user.achievements.find((a) => a.id === req.params.achievementId);
-  if (!achievement) return res.status(400).json({ error: 'achievementId no reconocido' });
-  if (achievement.completed) return res.status(409).json({ error: 'El logro ya fue completado previamente' });
+  const pool = getPool();
+  const { rows } = await pool.query('SELECT score_points, level, achievements FROM users WHERE id=$1', [req.userId]);
+  const u = rows[0];
+  const achievements = parseArr(u.achievements);
+  const ach = achievements.find((a) => a.id === req.params.achievementId);
 
-  achievement.completed = true;
-  user.scorePoints += achievement.points;
-  user.level = rules.computeLevel(user.scorePoints);
-  applyLevel(user);
-  await user.save();
-  res.json({ ok: true, achievement, pointsAwarded: achievement.points, newTotal: user.scorePoints });
+  if (!ach)          return res.status(400).json({ error: 'achievementId no reconocido' });
+  if (ach.completed) return res.status(409).json({ error: 'El logro ya fue completado previamente' });
+
+  ach.completed = true;
+  const newPoints = u.score_points + ach.points;
+  const newLevel  = rules.computeLevel(newPoints);
+  const b         = benefitsForLevel(newLevel);
+  await pool.query(
+    'UPDATE users SET achievements=$1, score_points=$2, level=$3, cashback_rate=$4, credit_limit=$5 WHERE id=$6',
+    [JSON.stringify(achievements), newPoints, newLevel, b.cashback_rate, b.credit_limit, req.userId]
+  );
+  res.json({ ok: true, achievement: ach, pointsAwarded: ach.points, newTotal: newPoints });
 }));
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -170,9 +194,10 @@ app.post('/api/user/achievements/:achievementId/complete', authMiddleware, h(asy
 // ════════════════════════════════════════════════════════════════════════════
 
 app.get('/api/deals', authMiddleware, h(async (req, res) => {
+  const pool = getPool();
+  const { rows } = await pool.query('SELECT * FROM deals WHERE active = true');
   const { site } = req.query;
-  const deals = await Deal.find({ active: true }).lean();
-  res.json(deals.map((d) => ({
+  res.json(rows.map((d) => ({
     id: d.id, site: d.site, title: d.title, description: d.description,
     discount: d.discount, tag: d.tag, color: d.color,
     isActive: site ? d.site === site : false,
@@ -180,13 +205,16 @@ app.get('/api/deals', authMiddleware, h(async (req, res) => {
 }));
 
 app.post('/api/deals/:dealId/subscribe', authMiddleware, h(async (req, res) => {
+  const pool   = getPool();
   const dealId = Number(req.params.dealId);
-  const deal = await Deal.findOne({ id: dealId });
-  if (!deal) return res.status(404).json({ error: 'Deal no encontrado' });
-  const user = await User.findById(req.userId);
-  if (!user.subscriptions.includes(dealId)) {
-    user.subscriptions.push(dealId);
-    await user.save();
+  const { rows: dr } = await pool.query('SELECT id FROM deals WHERE id=$1', [dealId]);
+  if (!dr[0]) return res.status(404).json({ error: 'Deal no encontrado' });
+
+  const { rows: ur } = await pool.query('SELECT subscriptions FROM users WHERE id=$1', [req.userId]);
+  const subs = parseArr(ur[0].subscriptions);
+  if (!subs.includes(dealId)) {
+    subs.push(dealId);
+    await pool.query('UPDATE users SET subscriptions=$1 WHERE id=$2', [JSON.stringify(subs), req.userId]);
   }
   res.json({ ok: true, dealId, subscribed: true });
 }));
@@ -195,71 +223,68 @@ app.post('/api/deals/:dealId/subscribe', authMiddleware, h(async (req, res) => {
 //  5. COMPRAS
 // ════════════════════════════════════════════════════════════════════════════
 
-/** POST /api/purchases/calculate-plans — Planes personalizados + elegibilidad. */
 app.post('/api/purchases/calculate-plans', authMiddleware, h(async (req, res) => {
   const { cartTotal } = req.body || {};
   if (typeof cartTotal !== 'number' || cartTotal < 1) {
     return res.status(400).json({ error: 'cartTotal inválido o menor a $1' });
   }
-  const user = await User.findById(req.userId);
-  const purchases = await Purchase.find({ userId: user._id }).lean();
-  const eligibility = rules.evaluateEligibility(user, cartTotal, purchases);
-  const { plans } = rules.calculatePlans(cartTotal, user.level, user.availableCredit);
-  res.json({
-    approved: eligibility.approved,
-    reason: eligibility.reason,
-    message: eligibility.message,
-    availableCredit: user.availableCredit,
-    plans,
-  });
+  const pool = getPool();
+  const { rows: ur } = await pool.query('SELECT level, available_credit FROM users WHERE id=$1', [req.userId]);
+  const { rows: pr } = await pool.query('SELECT status FROM purchases WHERE user_id=$1', [req.userId]);
+  const u = ur[0];
+  const eligibility = rules.evaluateEligibility({ availableCredit: u.available_credit }, cartTotal, pr);
+  const { plans } = rules.calculatePlans(cartTotal, u.level, u.available_credit);
+  res.json({ approved: eligibility.approved, reason: eligibility.reason, message: eligibility.message, availableCredit: u.available_credit, plans });
 }));
 
-/** POST /api/purchases — Registra una compra elegible y baja el crédito. */
 app.post('/api/purchases', authMiddleware, h(async (req, res) => {
   const { id, site, amount, plan, paymentPerPeriod, cashback, date, status } = req.body || {};
   if (!id || !site || amount == null || !plan) {
     return res.status(400).json({ error: 'Faltan campos requeridos: id, site, amount, plan' });
   }
-  if (await Purchase.findOne({ id })) {
-    return res.status(409).json({ error: 'Compra ya registrada' });
-  }
+  const pool = getPool();
+  const { rows: dup } = await pool.query('SELECT id FROM purchases WHERE id=$1', [id]);
+  if (dup[0]) return res.status(409).json({ error: 'Compra ya registrada' });
 
-  const user = await User.findById(req.userId);
-  const purchases = await Purchase.find({ userId: user._id }).lean();
-  const eligibility = rules.evaluateEligibility(user, amount, purchases);
+  const { rows: ur } = await pool.query('SELECT level, available_credit, cashback_rate FROM users WHERE id=$1', [req.userId]);
+  const { rows: pr } = await pool.query('SELECT status FROM purchases WHERE user_id=$1', [req.userId]);
+  const u = ur[0];
+  const eligibility = rules.evaluateEligibility({ availableCredit: u.available_credit }, amount, pr);
   if (!eligibility.approved) {
     return res.status(422).json({ error: eligibility.message, reason: eligibility.reason });
   }
 
-  await Purchase.create({
-    id,
-    userId: user._id,
-    site,
-    amount,
-    plan,
-    paymentPerPeriod: paymentPerPeriod ?? amount / plan,
-    cashback: cashback ?? rules.calculateCashback(amount, user.level),
-    date: date ?? new Date().toISOString(),
-    status: status ?? 'activo',
-  });
-  user.availableCredit = Math.max(0, user.availableCredit - amount);
-  await user.save();
+  const finalCashback = cashback ?? rules.calculateCashback(amount, u.level);
+  await pool.query(
+    `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [id, req.userId, site, amount, plan, paymentPerPeriod ?? amount / plan,
+     finalCashback, date ?? new Date().toISOString(), status ?? 'activo']
+  );
+  await pool.query(
+    'UPDATE users SET available_credit = GREATEST(0, available_credit - $1) WHERE id=$2',
+    [amount, req.userId]
+  );
   res.status(201).json({ ok: true, id });
 }));
 
 app.get('/api/purchases', authMiddleware, h(async (req, res) => {
+  const pool = getPool();
   const { status, site } = req.query;
-  const filter = { userId: req.userId };
-  if (status) filter.status = status;
-  if (site) filter.site = site;
-  const purchases = await Purchase.find(filter).sort({ date: -1 }).lean();
-  res.json(purchases.map(serializePurchase));
+  let q = 'SELECT * FROM purchases WHERE user_id=$1';
+  const params = [req.userId];
+  if (status) { q += ` AND status=$${params.push(status)}`; }
+  if (site)   { q += ` AND site=$${params.push(site)}`; }
+  q += ' ORDER BY date DESC';
+  const { rows } = await pool.query(q, params);
+  res.json(rows.map(serializePurchase));
 }));
 
 app.get('/api/purchases/:purchaseId', authMiddleware, h(async (req, res) => {
-  const purchase = await Purchase.findOne({ id: req.params.purchaseId, userId: req.userId }).lean();
-  if (!purchase) return res.status(404).json({ error: 'Compra no encontrada' });
-  res.json(serializePurchase(purchase));
+  const pool = getPool();
+  const { rows } = await pool.query('SELECT * FROM purchases WHERE id=$1 AND user_id=$2', [req.params.purchaseId, req.userId]);
+  if (!rows[0]) return res.status(404).json({ error: 'Compra no encontrada' });
+  res.json(serializePurchase(rows[0]));
 }));
 
 app.put('/api/purchases/:purchaseId/status', authMiddleware, h(async (req, res) => {
@@ -267,19 +292,16 @@ app.put('/api/purchases/:purchaseId/status', authMiddleware, h(async (req, res) 
   if (!['activo', 'pagado', 'vencido'].includes(status)) {
     return res.status(400).json({ error: 'Estado inválido (activo | pagado | vencido)' });
   }
-  const purchase = await Purchase.findOne({ id: req.params.purchaseId, userId: req.userId });
-  if (!purchase) return res.status(404).json({ error: 'Compra no encontrada' });
-  purchase.status = status;
-  await purchase.save();
-  res.json({ ok: true, id: purchase.id, status });
+  const pool = getPool();
+  const { rows } = await pool.query('SELECT id FROM purchases WHERE id=$1 AND user_id=$2', [req.params.purchaseId, req.userId]);
+  if (!rows[0]) return res.status(404).json({ error: 'Compra no encontrada' });
+  await pool.query('UPDATE purchases SET status=$1 WHERE id=$2', [status, req.params.purchaseId]);
+  res.json({ ok: true, id: req.params.purchaseId, status });
 }));
 
 function serializePurchase(p) {
-  return {
-    id: p.id, site: p.site, amount: p.amount, plan: p.plan,
-    paymentPerPeriod: p.paymentPerPeriod, cashback: p.cashback,
-    date: p.date, status: p.status,
-  };
+  return { id: p.id, site: p.site, amount: p.amount, plan: p.plan,
+           paymentPerPeriod: p.payment_per_period, cashback: p.cashback, date: p.date, status: p.status };
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -287,10 +309,9 @@ function serializePurchase(p) {
 // ════════════════════════════════════════════════════════════════════════════
 
 app.get('/api/user/cashback', authMiddleware, h(async (req, res) => {
-  const purchases = await Purchase.find({ userId: req.userId, cashback: { $gt: 0 } }).lean();
-  const history = purchases.map((p) => ({
-    purchaseId: p.id, site: p.site, purchaseAmount: p.amount, cashbackAmount: p.cashback, date: p.date,
-  }));
+  const pool = getPool();
+  const { rows } = await pool.query('SELECT * FROM purchases WHERE user_id=$1 AND cashback > 0', [req.userId]);
+  const history = rows.map((p) => ({ purchaseId: p.id, site: p.site, purchaseAmount: p.amount, cashbackAmount: p.cashback, date: p.date }));
   const totalEarned = Math.round(history.reduce((s, h2) => s + h2.cashbackAmount, 0) * 100) / 100;
   res.json({ totalEarned, history });
 }));
@@ -306,16 +327,12 @@ app.get('/api/health', (_req, res) => {
 // ─── Inicio del servidor ──────────────────────────────────────────────────────
 
 async function start() {
-  await connectDB();
-  await seedDatabase();
-  const server = app.listen(PORT, () => {
-    console.log(`\n🟢 Kueski Widget Server (MongoDB) en http://localhost:${PORT}`);
+  const pool = await connectDB();
+  await initSchema(pool);
+  await seedDatabase(pool);
+  app.listen(PORT, () => {
+    console.log(`\n🟢 Kueski Widget Server (PostgreSQL) en http://localhost:${PORT}`);
     console.log(`   POST /api/auth/login  ·  usuarios demo: carlos/ana/diego/sofia/pedro (pass: kueski123)`);
-  });
-  server.on('error', (err) => {
-    if (err.code === 'EADDRINUSE') console.error(`\n🔴 Puerto ${PORT} en uso. lsof -ti:${PORT} | xargs kill -9`);
-    else console.error('Error al iniciar:', err.message);
-    process.exit(1);
   });
 }
 
@@ -326,4 +343,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { app, start };
+module.exports = { app, start, setPool };

@@ -1,96 +1,107 @@
 /**
- * db.js — Conexión y modelos de MongoDB (Mongoose)
+ * db.js — Pool de conexión y esquema de PostgreSQL (driver `pg` nativo).
  *
- * Colecciones:
+ * Tablas:
  *   - users      → cuentas con perfil, score, logros y preferencias
  *   - purchases  → compras por usuario
  *   - deals      → catálogo de promociones (seed estático)
+ *
+ * Los campos de tipo array/objeto (achievements, disabled_sites, subscriptions)
+ * se almacenan como TEXT serializado en JSON para máxima compatibilidad con el
+ * entorno de tests (pg-mem) y facilitar la lectura directa en el panel de Aiven.
  */
 
-const mongoose = require('mongoose');
+const { Pool } = require('pg');
 
-const achievementSchema = new mongoose.Schema(
-  {
-    id: String,
-    title: String,
-    completed: { type: Boolean, default: false },
-    points: Number,
-  },
-  { _id: false }
-);
+let _pool = null;
 
-const userSchema = new mongoose.Schema(
-  {
-    username: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    passwordHash: { type: String, required: true },
-    name: String,
-    level: { type: String, default: 'Bronce' },
-    creditLimit: Number,
-    availableCredit: Number,
-    cashbackRate: Number,
-    scorePoints: { type: Number, default: 0 },
-    nextPayment: {
-      date: String,
-      amount: Number,
-    },
-    achievements: [achievementSchema],
-    preferences: {
-      disabledSites: { type: [String], default: [] },
-      notifications: {
-        deals: { type: Boolean, default: true },
-        reminders: { type: Boolean, default: true },
-      },
-    },
-    subscriptions: { type: [Number], default: [] },
-  },
-  { timestamps: true }
-);
+/** Crea un pool nuevo (útil en tests para inyectar pg-mem). */
+function createPool(connectionString) {
+  return new Pool({
+    connectionString,
+    ssl: connectionString && !connectionString.startsWith('postgres://localhost')
+      ? { rejectUnauthorized: false }
+      : false,
+  });
+}
 
-const purchaseSchema = new mongoose.Schema(
-  {
-    id: { type: String, required: true, unique: true },
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
-    site: String,
-    amount: Number,
-    plan: Number,
-    paymentPerPeriod: Number,
-    cashback: Number,
-    date: String,
-    status: { type: String, enum: ['activo', 'pagado', 'vencido'], default: 'activo' },
-  },
-  { timestamps: true }
-);
+/** Devuelve el pool global (o null si no se ha inicializado). */
+function getPool() {
+  return _pool;
+}
 
-const dealSchema = new mongoose.Schema(
-  {
-    id: { type: Number, required: true, unique: true },
-    site: String,
-    title: String,
-    description: String,
-    discount: String,
-    tag: String,
-    color: String,
-    active: { type: Boolean, default: true },
-  },
-  { _id: false }
-);
+/** Reemplaza el pool global (para inyección en tests). */
+function setPool(pool) {
+  _pool = pool;
+}
 
-const User = mongoose.models.User || mongoose.model('User', userSchema);
-const Purchase = mongoose.models.Purchase || mongoose.model('Purchase', purchaseSchema);
-const Deal = mongoose.models.Deal || mongoose.model('Deal', dealSchema);
-
-/** Conecta a MongoDB. Lanza si la URI no está definida. */
-async function connectDB(uri = process.env.MONGODB_URI) {
-  if (!uri) {
-    throw new Error('MONGODB_URI no está definida. Configúrala en el entorno (.env / Render).');
+/**
+ * Conecta al servidor usando DATABASE_URL y almacena el pool globalmente.
+ * Lanza si la variable no está definida.
+ */
+async function connectDB(url = process.env.DATABASE_URL) {
+  if (!url) {
+    throw new Error('DATABASE_URL no está definida. Configúrala en el entorno (.env / Aiven / Render).');
   }
-  mongoose.set('strictQuery', true);
-  await mongoose.connect(uri);
-  return mongoose.connection;
+  _pool = createPool(url);
+  // Verifica que la conexión funcione antes de continuar.
+  await _pool.query('SELECT 1');
+  return _pool;
 }
 
 async function disconnectDB() {
-  await mongoose.disconnect();
+  if (_pool) {
+    await _pool.end();
+    _pool = null;
+  }
 }
 
-module.exports = { mongoose, connectDB, disconnectDB, User, Purchase, Deal };
+/** Crea las tablas si no existen (idempotente, seguro de llamar en cada arranque). */
+async function initSchema(pool) {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id                TEXT PRIMARY KEY,
+      username          TEXT NOT NULL UNIQUE,
+      password_hash     TEXT NOT NULL,
+      name              TEXT,
+      level             TEXT NOT NULL DEFAULT 'Bronce',
+      credit_limit      REAL NOT NULL DEFAULT 2500,
+      available_credit  REAL NOT NULL DEFAULT 2500,
+      cashback_rate     REAL NOT NULL DEFAULT 0.005,
+      score_points      INTEGER NOT NULL DEFAULT 0,
+      next_payment_date TEXT,
+      next_payment_amount REAL,
+      disabled_sites    TEXT NOT NULL DEFAULT '[]',
+      notif_deals       BOOLEAN NOT NULL DEFAULT true,
+      notif_reminders   BOOLEAN NOT NULL DEFAULT true,
+      subscriptions     TEXT NOT NULL DEFAULT '[]',
+      achievements      TEXT NOT NULL DEFAULT '[]'
+    );
+
+    CREATE TABLE IF NOT EXISTS purchases (
+      id                  TEXT PRIMARY KEY,
+      user_id             TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      site                TEXT,
+      amount              REAL,
+      plan                INTEGER,
+      payment_per_period  REAL,
+      cashback            REAL DEFAULT 0,
+      date                TEXT,
+      status              TEXT NOT NULL DEFAULT 'activo'
+        CHECK (status IN ('activo', 'pagado', 'vencido'))
+    );
+
+    CREATE TABLE IF NOT EXISTS deals (
+      id          INTEGER PRIMARY KEY,
+      site        TEXT,
+      title       TEXT,
+      description TEXT,
+      discount    TEXT,
+      tag         TEXT,
+      color       TEXT,
+      active      BOOLEAN NOT NULL DEFAULT true
+    );
+  `);
+}
+
+module.exports = { createPool, getPool, setPool, connectDB, disconnectDB, initSchema };

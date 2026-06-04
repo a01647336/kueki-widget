@@ -1,15 +1,15 @@
 # Kueski Widget — Backend
 
-API REST en **Express.js** con **MongoDB** (Mongoose) y autenticación **usuario/contraseña → JWT** (bcrypt + HS256). Multiusuario: cada cuenta tiene su propio perfil, score, crédito, compras y cashback.
+API REST en **Express.js** con **PostgreSQL** (Aiven, driver `pg` nativo) y autenticación **usuario/contraseña → JWT** (bcrypt + HS256). Multiusuario: cada cuenta tiene su propio perfil, score, crédito, compras y cashback.
 
 - **Reglas de negocio** (score → nivel → cashback/crédito/quincenas) y **motor de elegibilidad** (mora, límite de compras, crédito, monto): `lib/rules.js`.
-- **Modelos y conexión**: `lib/db.js`. **Seed** de usuarios y deals: `lib/seed.js`.
+- **Esquema y pool**: `lib/db.js`. **Seed** de usuarios y deals: `lib/seed.js`.
 
 ## Variables de entorno
 
 | Variable | Descripción |
 |---|---|
-| `MONGODB_URI` | Connection string de MongoDB (Atlas o local). **Requerida.** |
+| `DATABASE_URL` | Service URI de Aiven PostgreSQL (incluye usuario, contraseña, host, puerto y SSL). **Requerida.** |
 | `JWT_SECRET` | Secreto para firmar los JWT. |
 | `PORT` | Puerto (default `3001`). |
 | `NODE_ENV` | `production` en Render. |
@@ -19,28 +19,45 @@ API REST en **Express.js** con **MongoDB** (Mongoose) y autenticación **usuario
 ```bash
 cd server
 npm install
-MONGODB_URI="mongodb+srv://...." npm start
+DATABASE_URL="postgresql://user:pass@host:port/defaultdb?sslmode=require" npm start
 ```
 
-Al primer arranque se siembran los deals y los **usuarios de demo** (password de todos: `kueski123`):
+Al primer arranque se crean las tablas (idempotente) y se siembran los **usuarios de demo** (password de todos: `kueski123`):
 
 | Usuario | Nivel | Notas |
 |---|---|---|
-| `carlos` | Bronce | |
-| `ana` | Plata | |
-| `diego` | Oro | |
-| `sofia` | Platino | |
+| `carlos` | Bronce | Planes de 2 y 4 quincenas |
+| `ana` | Plata | Hasta 6 quincenas |
+| `diego` | Oro | Hasta 8 quincenas |
+| `sofia` | Platino | Hasta 12 quincenas, 5% cashback |
 | `pedro` | Plata | tiene un pago **vencido** (demuestra el rechazo por mora) |
 
-## Desplegar en Render
+## Desplegar en Aiven + Render
 
-1. Crea un cluster gratis en **MongoDB Atlas** (M0), un usuario de DB y permite el acceso desde `0.0.0.0/0` (Network Access). Copia la connection string.
-2. En **Render** → *New* → *Blueprint* y conecta este repo (usa el `render.yaml` de la raíz), o crea un *Web Service* manual con `rootDir: server`, build `npm install`, start `npm start`.
-3. Configura las env vars: `MONGODB_URI` (tu string de Atlas), `JWT_SECRET`, `NODE_ENV=production`.
-4. La URL pública (`https://<app>.onrender.com`) se usa para construir la extensión:
-   `PLASMO_PUBLIC_API_URL=https://<app>.onrender.com/api npm run build`.
+### 1. Crear la base de datos en Aiven
+1. Ve a [aiven.io](https://aiven.io) → **Create service** → **PostgreSQL** → Free plan.
+2. Espera a que el servicio quede `Running`.
+3. En la vista del servicio copia el **Service URI**:
+   `postgresql://avnadmin:xxxx@xx.aivencloud.com:12345/defaultdb?sslmode=require`
 
-> Plan gratuito: el servicio "duerme" tras ~15 min de inactividad (primer request lento) y el almacenamiento del contenedor es efímero, pero **los datos viven en Atlas**, así que persisten.
+### 2. Desplegar en Render
+1. Ve a [render.com](https://render.com) → **New → Blueprint** y conecta este repo (usa el [`render.yaml`](../render.yaml)), o crea un **Web Service** manual con:
+   - Root directory: `server`
+   - Build: `npm install`
+   - Start: `npm start`
+2. En **Environment variables** agrega:
+   - `DATABASE_URL` = (el Service URI de Aiven)
+   - `JWT_SECRET` = (genera un string aleatorio, ej. `openssl rand -hex 32`)
+   - `NODE_ENV` = `production`
+3. Haz **Deploy** y espera ~2 min.
+4. Copia la URL pública: `https://<app>.onrender.com`.
+
+### 3. Build de la extensión con la URL de producción
+```bash
+PLASMO_PUBLIC_API_URL=https://<app>.onrender.com/api npm run build
+```
+
+> Plan gratuito de Render: el servicio duerme tras ~15 min de inactividad (primer request lento). Los **datos persisten en Aiven** aunque el contenedor se reinicie.
 
 ## Endpoints
 

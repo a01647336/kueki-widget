@@ -1,7 +1,7 @@
 {
   "name": "kueski-widget-server",
   "version": "1.0.0",
-  "description": "Backend del Kueski Smart Widget (Express + MongoDB + JWT)",
+  "description": "Backend del Kueski Smart Widget (Express + PostgreSQL + JWT)",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {

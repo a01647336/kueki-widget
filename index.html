@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kueski Smart Widget — Extension de Chrome para Kueski Pay</title>
+  <meta name="description" content="Extension de Chrome que detecta tiendas compatibles, simula pagos en quincenas personalizados por nivel, gamifica el uso de Kueski y muestra recordatorios de pago contextuales." />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            kueski: { blue: '#173CEC', green: '#00B140', dark: '#0B1B6B' },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    html { scroll-behavior: smooth; }
+    .gradient-hero { background: radial-gradient(1200px 600px at 80% -10%, rgba(23,60,236,.18), transparent), linear-gradient(180deg, #ffffff 0%, #f5f7ff 100%); }
+  </style>
+</head>
+<body class="bg-white text-gray-900 antialiased">
+
+  <!-- Nav -->
+  <header class="sticky top-0 z-50 bg-white/80 backdrop-blur border-b border-gray-100">
+    <nav class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <div class="w-9 h-9 rounded-xl bg-kueski-blue flex items-center justify-center text-white font-extrabold text-sm">KSW</div>
+        <span class="font-bold text-lg">Kueski <span class="text-kueski-blue">Smart Widget</span></span>
+      </div>
+      <div class="hidden md:flex items-center gap-8 text-sm font-medium text-gray-600">
+        <a href="#funciones" class="hover:text-kueski-blue transition">Funciones</a>
+        <a href="#stack" class="hover:text-kueski-blue transition">Tecnologias</a>
+        <a href="#arquitectura" class="hover:text-kueski-blue transition">Arquitectura</a>
+        <a href="#niveles" class="hover:text-kueski-blue transition">Niveles</a>
+        <a href="#instalar" class="hover:text-kueski-blue transition">Instalar</a>
+      </div>
+      <a href="https://github.com/a01647336/kueki-widget" target="_blank" rel="noopener" class="bg-kueski-blue text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-kueski-dark transition">Ver en GitHub</a>
+    </nav>
+  </header>
+
+  <!-- Hero -->
+  <section class="gradient-hero">
+    <div class="max-w-6xl mx-auto px-6 py-20 md:py-28 grid md:grid-cols-2 gap-12 items-center">
+      <div>
+        <span class="inline-block bg-blue-50 text-kueski-blue text-xs font-semibold px-3 py-1 rounded-full mb-5 border border-blue-100">
+          Proyecto academico — Construccion de Software, Gpo 501
+        </span>
+        <h1 class="text-4xl md:text-5xl font-extrabold leading-tight tracking-tight">
+          Kueski Pay<br /><span class="text-kueski-blue">en cada compra</span>
+        </h1>
+        <p class="mt-5 text-lg text-gray-600 max-w-md">
+          Extension de Chrome que detecta tiendas compatibles, simula planes de pago personalizados por nivel, gamifica el uso con Score Coach y avisa cuando se acerca la fecha de pago.
+        </p>
+        <div class="mt-8 flex flex-wrap gap-3">
+          <a href="#instalar" class="bg-kueski-blue text-white font-semibold px-6 py-3 rounded-xl hover:bg-kueski-dark transition shadow-lg shadow-kueski-blue/20">Instalar la extension</a>
+          <a href="https://github.com/a01647336/kueki-widget" target="_blank" rel="noopener" class="border border-gray-300 font-semibold px-6 py-3 rounded-xl hover:bg-gray-50 transition">Codigo en GitHub</a>
+        </div>
+        <div class="mt-8 flex items-center gap-6 text-sm text-gray-500">
+          <div><span class="font-bold text-gray-900">5</span> tiendas compatibles</div>
+          <div><span class="font-bold text-gray-900">Hasta 5%</span> de cashback</div>
+          <div><span class="font-bold text-gray-900">144</span> pruebas automatizadas</div>
+        </div>
+      </div>
+
+      <!-- Mock del widget -->
+      <div class="relative">
+        <div class="absolute -inset-4 bg-kueski-blue/10 blur-2xl rounded-3xl"></div>
+        <div class="relative bg-white rounded-2xl shadow-2xl border border-blue-100 w-80 mx-auto overflow-hidden">
+          <div class="bg-kueski-blue text-white p-4">
+            <div class="flex items-center justify-between">
+              <span class="font-bold">Kueski Pay</span>
+              <span class="text-white/70 text-xs">Ana Torres · Nivel Plata</span>
+            </div>
+            <div class="mt-3 flex gap-1 bg-white/10 rounded-lg p-1 text-xs">
+              <span class="flex-1 text-center bg-white text-kueski-blue font-semibold rounded-md py-1.5">Smart</span>
+              <span class="flex-1 text-center text-white/80 py-1.5">Score</span>
+              <span class="flex-1 text-center text-white/80 py-1.5">Deals</span>
+            </div>
+          </div>
+          <div class="p-4 bg-gray-50 space-y-3">
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
+              <div class="w-4 h-4 text-amber-500 shrink-0 mt-0.5 font-bold text-xs flex items-center justify-center">!</div>
+              <div>
+                <p class="text-xs font-semibold text-amber-800">Tu pago vence en 5 dias</p>
+                <p class="text-xs text-amber-700">$649.50 el 10 de junio</p>
+              </div>
+            </div>
+            <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+              <p class="text-xs text-emerald-700 font-semibold">Total de tu carrito</p>
+              <p class="text-2xl font-bold">$3,200.00</p>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-xl border-2 border-kueski-blue bg-blue-50">
+              <span class="text-sm font-semibold">4 quincenas</span>
+              <span class="text-sm font-bold text-kueski-blue">$800.00 / quincena</span>
+            </div>
+            <div class="flex items-center justify-between p-3 rounded-xl border border-gray-200 bg-white">
+              <span class="text-sm font-semibold">6 quincenas</span>
+              <span class="text-sm font-bold text-gray-700">$533.33 / quincena</span>
+            </div>
+            <button class="w-full bg-kueski-blue text-white py-2.5 rounded-xl text-sm font-semibold">Confirmar con Kueski Pay</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Propuesta de valor -->
+  <section class="bg-kueski-dark text-white">
+    <div class="max-w-6xl mx-auto px-6 py-10 grid sm:grid-cols-3 gap-6 text-center">
+      <div>
+        <p class="text-3xl font-extrabold">+ Transacciones</p>
+        <p class="text-white/70 text-sm mt-1">Recordatorios contextuales en el momento exacto de comprar</p>
+      </div>
+      <div>
+        <p class="text-3xl font-extrabold">- Friccion</p>
+        <p class="text-white/70 text-sm mt-1">Simula tu pago sin salir de la tienda, con confirmacion previa</p>
+      </div>
+      <div>
+        <p class="text-3xl font-extrabold">+ Recurrencia</p>
+        <p class="text-white/70 text-sm mt-1">Gamificacion que premia volver a usar Kueski</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Funciones -->
+  <section id="funciones" class="max-w-6xl mx-auto px-6 py-20">
+    <div class="text-center max-w-2xl mx-auto mb-14">
+      <h2 class="text-3xl md:text-4xl font-extrabold">Funciones del widget</h2>
+      <p class="mt-3 text-gray-600">Seis modulos disenados para integrar Kueski en la navegacion diaria.</p>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-6">
+      <div class="rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition">
+        <div class="w-11 h-11 rounded-xl bg-blue-50 text-kueski-blue flex items-center justify-center font-bold text-lg mb-4">SR</div>
+        <h3 class="font-bold text-lg">Smart Reminder</h3>
+        <p class="text-gray-600 text-sm mt-2">Detecta el sitio actual y muestra el CTA de Kueski Pay en contexto. Incluye un banner de aviso cuando el proximo pago vence en 7 dias o menos.</p>
+      </div>
+      <div class="rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition">
+        <div class="w-11 h-11 rounded-xl bg-emerald-50 text-kueski-green flex items-center justify-center font-bold text-lg mb-4">SP</div>
+        <h3 class="font-bold text-lg">Simulacion de pagos</h3>
+        <p class="text-gray-600 text-sm mt-2">Calcula planes de quincenas personalizados por nivel y credito del usuario. Evalua la elegibilidad (mora, limite, credito) y pide confirmacion antes de registrar.</p>
+      </div>
+      <div class="rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition">
+        <div class="w-11 h-11 rounded-xl bg-yellow-50 text-yellow-600 flex items-center justify-center font-bold text-lg mb-4">SC</div>
+        <h3 class="font-bold text-lg">Score Coach</h3>
+        <p class="text-gray-600 text-sm mt-2">Sistema de puntos y niveles (Bronce a Platino). Logros reales basados en el historial del usuario en la base de datos, con barra de progreso animada.</p>
+      </div>
+      <div class="rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition">
+        <div class="w-11 h-11 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-lg mb-4">DF</div>
+        <h3 class="font-bold text-lg">Deals Finder</h3>
+        <p class="text-gray-600 text-sm mt-2">Muestra promociones de todas las tiendas compatibles. Cada tarjeta abre el sitio en una nueva pestana para ver la oferta en contexto real con el widget activo.</p>
+      </div>
+      <div class="rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition">
+        <div class="w-11 h-11 rounded-xl bg-gray-100 text-gray-700 flex items-center justify-center font-bold text-lg mb-4">UP</div>
+        <h3 class="font-bold text-lg">Perfil de usuario</h3>
+        <p class="text-gray-600 text-sm mt-2">Muestra nombre, nivel, credito disponible, proximo pago, tasa de cashback e historial de compras expandible con el estado de cada transaccion.</p>
+      </div>
+      <div class="rounded-2xl border border-gray-100 p-6 shadow-sm hover:shadow-md transition">
+        <div class="w-11 h-11 rounded-xl bg-emerald-50 text-kueski-green flex items-center justify-center font-bold text-lg mb-4">CB</div>
+        <h3 class="font-bold text-lg">Cashback real</h3>
+        <p class="text-gray-600 text-sm mt-2">Cada compra acumula cashback calculado y persistido en la base de datos segun el nivel del usuario: de 0.5% en Bronce hasta 5% en Platino.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Stack tecnologico -->
+  <section id="stack" class="bg-gray-50 border-y border-gray-100">
+    <div class="max-w-6xl mx-auto px-6 py-20">
+      <div class="text-center max-w-2xl mx-auto mb-12">
+        <h2 class="text-3xl md:text-4xl font-extrabold">Stack tecnologico</h2>
+        <p class="mt-3 text-gray-600">Tecnologias seleccionadas para construir una extension de Chrome real con backend en la nube.</p>
+      </div>
+
+      <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
+        <div class="bg-white rounded-xl p-5 border border-gray-200">
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Extension de Chrome</p>
+          <ul class="space-y-2 text-sm">
+            <li><span class="font-semibold text-kueski-blue">Plasmo 0.90</span> — framework MV3 para extensiones</li>
+            <li><span class="font-semibold text-kueski-blue">React 18</span> — UI con componentes funcionales</li>
+            <li><span class="font-semibold text-kueski-blue">TypeScript</span> — tipado estricto en todo el proyecto</li>
+            <li><span class="font-semibold text-kueski-blue">Tailwind CSS v3</span> — estilos en Shadow DOM</li>
+            <li><span class="font-semibold text-kueski-blue">Framer Motion</span> — animaciones y transiciones</li>
+            <li><span class="font-semibold text-kueski-blue">Lucide React</span> — iconografia</li>
+          </ul>
+        </div>
+
+        <div class="bg-white rounded-xl p-5 border border-gray-200">
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Backend</p>
+          <ul class="space-y-2 text-sm">
+            <li><span class="font-semibold text-kueski-blue">Node.js</span> — entorno de ejecucion</li>
+            <li><span class="font-semibold text-kueski-blue">Express 4</span> — framework HTTP</li>
+            <li><span class="font-semibold text-kueski-blue">pg</span> — driver PostgreSQL nativo (sin ORM)</li>
+            <li><span class="font-semibold text-kueski-blue">bcryptjs</span> — hash de contraseñas</li>
+            <li><span class="font-semibold text-kueski-blue">JWT HS256</span> — autenticacion con crypto nativo</li>
+            <li><span class="font-semibold text-kueski-blue">CORS</span> — acceso desde el content script</li>
+          </ul>
+        </div>
+
+        <div class="bg-white rounded-xl p-5 border border-gray-200">
+          <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Infraestructura y pruebas</p>
+          <ul class="space-y-2 text-sm">
+            <li><span class="font-semibold text-kueski-blue">Aiven PostgreSQL</span> — base de datos en la nube</li>
+            <li><span class="font-semibold text-kueski-blue">Render</span> — deploy del backend (Web Service)</li>
+            <li><span class="font-semibold text-kueski-blue">Vitest 4</span> — framework de pruebas</li>
+            <li><span class="font-semibold text-kueski-blue">Testing Library</span> — pruebas de componentes</li>
+            <li><span class="font-semibold text-kueski-blue">Supertest</span> — pruebas de integracion HTTP</li>
+            <li><span class="font-semibold text-kueski-blue">pg-mem</span> — PostgreSQL en memoria para tests</li>
+          </ul>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Arquitectura -->
+  <section id="arquitectura" class="max-w-6xl mx-auto px-6 py-20">
+    <div class="text-center max-w-2xl mx-auto mb-12">
+      <h2 class="text-3xl md:text-4xl font-extrabold">Como funciona</h2>
+      <p class="mt-3 text-gray-600">Tres capas integradas: extension de Chrome, backend en la nube y base de datos PostgreSQL.</p>
+    </div>
+
+    <div class="grid md:grid-cols-3 gap-6 items-start">
+
+      <div class="bg-blue-50 border border-blue-200 rounded-2xl p-6">
+        <div class="text-kueski-blue font-bold text-sm mb-3 uppercase tracking-wide">Extension de Chrome</div>
+        <ol class="space-y-3 text-sm text-gray-700">
+          <li class="flex gap-2"><span class="font-bold text-kueski-blue shrink-0">1.</span> Plasmo inyecta el content script en sitios compatibles (.com.mx)</li>
+          <li class="flex gap-2"><span class="font-bold text-kueski-blue shrink-0">2.</span> PriceDetector lee el total del carrito del DOM con MutationObserver</li>
+          <li class="flex gap-2"><span class="font-bold text-kueski-blue shrink-0">3.</span> El widget se monta en Shadow DOM (estilos aislados del sitio)</li>
+          <li class="flex gap-2"><span class="font-bold text-kueski-blue shrink-0">4.</span> Los datos de sesion se cargan de chrome.storage.local</li>
+        </ol>
+      </div>
+
+      <div class="bg-emerald-50 border border-emerald-200 rounded-2xl p-6">
+        <div class="text-kueski-green font-bold text-sm mb-3 uppercase tracking-wide">Backend en Render</div>
+        <ol class="space-y-3 text-sm text-gray-700">
+          <li class="flex gap-2"><span class="font-bold text-kueski-green shrink-0">5.</span> El widget llama a la API con Authorization: Bearer JWT</li>
+          <li class="flex gap-2"><span class="font-bold text-kueski-green shrink-0">6.</span> El backend valida el token y ejecuta la logica de negocio</li>
+          <li class="flex gap-2"><span class="font-bold text-kueski-green shrink-0">7.</span> Los planes de pago se calculan con el nivel y credito del usuario</li>
+          <li class="flex gap-2"><span class="font-bold text-kueski-green shrink-0">8.</span> Si el backend no responde, el widget usa localStorage como fallback</li>
+        </ol>
+      </div>
+
+      <div class="bg-purple-50 border border-purple-200 rounded-2xl p-6">
+        <div class="text-purple-700 font-bold text-sm mb-3 uppercase tracking-wide">PostgreSQL en Aiven</div>
+        <ol class="space-y-3 text-sm text-gray-700">
+          <li class="flex gap-2"><span class="font-bold text-purple-700 shrink-0">9.</span> Tabla <code class="bg-white px-1 rounded text-xs">users</code>: perfil, score, logros, credito</li>
+          <li class="flex gap-2"><span class="font-bold text-purple-700 shrink-0">10.</span> Tabla <code class="bg-white px-1 rounded text-xs">purchases</code>: historial por usuario con FK</li>
+          <li class="flex gap-2"><span class="font-bold text-purple-700 shrink-0">11.</span> Tabla <code class="bg-white px-1 rounded text-xs">deals</code>: catalogo de promociones</li>
+          <li class="flex gap-2"><span class="font-bold text-purple-700 shrink-0">12.</span> Cada usuario ve y modifica unicamente sus propios datos</li>
+        </ol>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Niveles -->
+  <section id="niveles" class="bg-gray-50 border-y border-gray-100">
+    <div class="max-w-6xl mx-auto px-6 py-20">
+      <div class="text-center max-w-2xl mx-auto mb-12">
+        <h2 class="text-3xl md:text-4xl font-extrabold">Entre mas usas Kueski, mas beneficios</h2>
+        <p class="mt-3 text-gray-600">El score determina el nivel, y el nivel determina el cashback, el credito disponible y las quincenas accesibles.</p>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm bg-white rounded-2xl overflow-hidden shadow-sm">
+          <thead class="bg-kueski-blue text-white text-left">
+            <tr>
+              <th class="px-5 py-4 font-semibold">Nivel</th>
+              <th class="px-5 py-4 font-semibold">Puntos</th>
+              <th class="px-5 py-4 font-semibold">Cashback</th>
+              <th class="px-5 py-4 font-semibold">Credito MXN</th>
+              <th class="px-5 py-4 font-semibold">Quincenas</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <tr>
+              <td class="px-5 py-4 font-semibold">Bronce</td>
+              <td class="px-5 py-4">0 a 499</td>
+              <td class="px-5 py-4">0.5%</td>
+              <td class="px-5 py-4">$500 a $2,500</td>
+              <td class="px-5 py-4">2, 4</td>
+            </tr>
+            <tr>
+              <td class="px-5 py-4 font-semibold">Plata</td>
+              <td class="px-5 py-4">500 a 1,499</td>
+              <td class="px-5 py-4">1.5%</td>
+              <td class="px-5 py-4">$2,501 a $8,000</td>
+              <td class="px-5 py-4">2, 4, 6</td>
+            </tr>
+            <tr>
+              <td class="px-5 py-4 font-semibold">Oro</td>
+              <td class="px-5 py-4">1,500 a 3,999</td>
+              <td class="px-5 py-4">2.5%</td>
+              <td class="px-5 py-4">$8,001 a $15,000</td>
+              <td class="px-5 py-4">2, 4, 6, 8</td>
+            </tr>
+            <tr class="bg-purple-50/50">
+              <td class="px-5 py-4 font-semibold">Platino</td>
+              <td class="px-5 py-4">4,000+</td>
+              <td class="px-5 py-4 font-bold text-kueski-green">5.0%</td>
+              <td class="px-5 py-4">$15,001 a $25,000</td>
+              <td class="px-5 py-4">2, 4, 6, 8, 12</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="mt-8 bg-white border border-gray-200 rounded-2xl p-6">
+        <p class="text-sm font-semibold text-gray-700 mb-4">Evaluacion de elegibilidad de compra</p>
+        <div class="grid sm:grid-cols-2 gap-3 text-sm">
+          <div class="flex gap-3 items-start bg-red-50 border border-red-100 rounded-xl p-3">
+            <span class="font-bold text-red-500 shrink-0">X</span>
+            <div><p class="font-semibold">MORA</p><p class="text-gray-600 text-xs">El usuario tiene un pago con estado vencido</p></div>
+          </div>
+          <div class="flex gap-3 items-start bg-red-50 border border-red-100 rounded-xl p-3">
+            <span class="font-bold text-red-500 shrink-0">X</span>
+            <div><p class="font-semibold">LIMITE_COMPRAS_ACTIVAS</p><p class="text-gray-600 text-xs">5 o mas compras activas simultaneas</p></div>
+          </div>
+          <div class="flex gap-3 items-start bg-red-50 border border-red-100 rounded-xl p-3">
+            <span class="font-bold text-red-500 shrink-0">X</span>
+            <div><p class="font-semibold">CREDITO_INSUFICIENTE</p><p class="text-gray-600 text-xs">El monto supera el credito disponible</p></div>
+          </div>
+          <div class="flex gap-3 items-start bg-red-50 border border-red-100 rounded-xl p-3">
+            <span class="font-bold text-red-500 shrink-0">X</span>
+            <div><p class="font-semibold">MONTO_INVALIDO</p><p class="text-gray-600 text-xs">Monto menor a $50 MXN</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Instalar -->
+  <section id="instalar" class="max-w-4xl mx-auto px-6 py-20">
+    <div class="text-center max-w-2xl mx-auto mb-12">
+      <h2 class="text-3xl md:text-4xl font-extrabold">Instalacion</h2>
+      <p class="mt-3 text-gray-600">Proyecto academico — se carga como extension descomprimida en modo desarrollador.</p>
+    </div>
+
+    <ol class="space-y-4">
+      <li class="flex gap-4 items-start bg-white border border-gray-100 rounded-xl p-5 shadow-sm">
+        <span class="w-8 h-8 rounded-full bg-kueski-blue text-white font-bold flex items-center justify-center shrink-0 text-sm">1</span>
+        <div>
+          <p class="font-semibold">Clonar el repositorio e instalar dependencias</p>
+          <code class="block bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 text-sm mt-2 text-gray-700">git clone https://github.com/a01647336/kueki-widget.git<br>cd kueki-widget<br>npm install</code>
+        </div>
+      </li>
+      <li class="flex gap-4 items-start bg-white border border-gray-100 rounded-xl p-5 shadow-sm">
+        <span class="w-8 h-8 rounded-full bg-kueski-blue text-white font-bold flex items-center justify-center shrink-0 text-sm">2</span>
+        <div>
+          <p class="font-semibold">Generar el build de produccion</p>
+          <code class="block bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 text-sm mt-2 text-gray-700">PLASMO_PUBLIC_API_URL=https://kueski-widget-api.onrender.com/api npm run build</code>
+          <p class="text-gray-500 text-xs mt-2">Genera la extension en <code>build/chrome-mv3-prod/</code></p>
+        </div>
+      </li>
+      <li class="flex gap-4 items-start bg-white border border-gray-100 rounded-xl p-5 shadow-sm">
+        <span class="w-8 h-8 rounded-full bg-kueski-blue text-white font-bold flex items-center justify-center shrink-0 text-sm">3</span>
+        <div>
+          <p class="font-semibold">Cargar en Chrome</p>
+          <p class="text-gray-600 text-sm mt-1">Ir a <code class="bg-gray-100 px-1.5 py-0.5 rounded text-kueski-blue">chrome://extensions</code>, activar el Modo desarrollador, clic en "Cargar descomprimida" y seleccionar <code class="bg-gray-100 px-1.5 py-0.5 rounded text-kueski-blue">build/chrome-mv3-prod/</code>.</p>
+        </div>
+      </li>
+      <li class="flex gap-4 items-start bg-white border border-gray-100 rounded-xl p-5 shadow-sm">
+        <span class="w-8 h-8 rounded-full bg-kueski-green text-white font-bold flex items-center justify-center shrink-0 text-sm">4</span>
+        <div>
+          <p class="font-semibold">Navegar a una tienda compatible</p>
+          <p class="text-gray-600 text-sm mt-1">Amazon, Mercado Libre, Liverpool, Coppel o Elektra (.com.mx). El widget aparece abajo a la derecha. El backend ya esta desplegado en Render — no se necesita correr nada localmente.</p>
+        </div>
+      </li>
+    </ol>
+
+    <div class="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-5">
+      <p class="font-semibold text-kueski-dark mb-2">Cuentas de demo (contraseña: kueski123)</p>
+      <p class="text-sm text-gray-600 mb-4">Cada cuenta tiene su propio nivel, score, historial y logros reales en la base de datos.</p>
+      <div class="grid sm:grid-cols-2 gap-2 text-sm">
+        <div class="bg-white rounded-lg px-3 py-2 border border-gray-200 flex justify-between">
+          <span class="font-semibold">carlos</span>
+          <span class="text-gray-500">Bronce — planes 2 y 4 quincenas</span>
+        </div>
+        <div class="bg-white rounded-lg px-3 py-2 border border-gray-200 flex justify-between">
+          <span class="font-semibold">ana</span>
+          <span class="text-gray-500">Plata — hasta 6 quincenas</span>
+        </div>
+        <div class="bg-white rounded-lg px-3 py-2 border border-gray-200 flex justify-between">
+          <span class="font-semibold">diego</span>
+          <span class="text-gray-500">Oro — hasta 8 quincenas</span>
+        </div>
+        <div class="bg-white rounded-lg px-3 py-2 border border-gray-200 flex justify-between">
+          <span class="font-semibold">sofia</span>
+          <span class="text-gray-500">Platino — hasta 12 quincenas, 5% cashback</span>
+        </div>
+        <div class="bg-red-50 rounded-lg px-3 py-2 border border-red-200 flex justify-between sm:col-span-2">
+          <span class="font-semibold">pedro</span>
+          <span class="text-gray-500">Plata — pago vencido (demuestra rechazo por mora)</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="bg-gray-900 text-gray-400">
+    <div class="max-w-6xl mx-auto px-6 py-10 text-sm">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <p class="text-white font-semibold">Kueski Smart Widget</p>
+          <p class="mt-1">Construccion de Software y Toma de Decisiones — Gpo 501, Tecnologico de Monterrey</p>
+        </div>
+        <a href="https://github.com/a01647336/kueki-widget" target="_blank" rel="noopener" class="text-gray-300 hover:text-white transition text-sm font-medium">
+          github.com/a01647336/kueki-widget
+        </a>
+      </div>
+      <div class="mt-6 pt-6 border-t border-gray-800 flex flex-col sm:flex-row justify-between gap-3 text-xs">
+        <p>Equipo: Isaac Chavez · Gabriela Ruelas · Emilio Guzman · Samantha Gallardo</p>
+        <p class="text-gray-500">Proyecto academico — no publicado bajo la marca Kueski</p>
+      </div>
+    </div>
+  </footer>
+
+</body>
+</html>

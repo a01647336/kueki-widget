@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Kueski Smart Widget — Documento de Alcance</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green: #00A651;
+      --green-dark: #007A3D;
+      --green-light: #E6F7EE;
+      --gray-dark: #1A1A2E;
+      --gray-mid: #4A5568;
+      --gray-light: #F7F9FC;
+      --border: #E2E8F0;
+      --font: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+
+    html { font-size: 10pt; }
+
+    body {
+      font-family: var(--font);
+      color: var(--gray-dark);
+      background: #fff;
+      line-height: 1.6;
+    }
+
+    /* ---- COVER ---- */
+    .cover {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      text-align: center;
+      padding: 3cm 2cm;
+      background: var(--gray-dark);
+      color: #fff;
+      page-break-after: always;
+    }
+
+    .cover-badge {
+      display: inline-block;
+      background: var(--green);
+      color: #fff;
+      font-size: 7.5pt;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 4px 14px;
+      border-radius: 20px;
+      margin-bottom: 1.4rem;
+    }
+
+    .cover h1 {
+      font-size: 26pt;
+      font-weight: 800;
+      line-height: 1.2;
+      margin-bottom: 0.6rem;
+      color: #fff;
+    }
+
+    .cover h1 span { color: var(--green); }
+
+    .cover .subtitle {
+      font-size: 12pt;
+      color: #A0AEC0;
+      margin-bottom: 2.5rem;
+      max-width: 480px;
+    }
+
+    .cover-links {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 3rem;
+    }
+
+    .cover-links a {
+      color: #68D391;
+      font-size: 9pt;
+      text-decoration: none;
+      font-family: "Courier New", monospace;
+    }
+
+    .cover-links a:hover { text-decoration: underline; }
+
+    .cover-divider {
+      width: 60px;
+      height: 3px;
+      background: var(--green);
+      margin: 0 auto 2.5rem;
+    }
+
+    .cover-meta {
+      font-size: 8.5pt;
+      color: #718096;
+      line-height: 1.9;
+    }
+
+    .cover-meta strong { color: #CBD5E0; }
+
+    /* ---- MAIN CONTENT ---- */
+    .content {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 1.5cm 2cm;
+    }
+
+    /* Section headings */
+    .section {
+      margin-bottom: 2.2rem;
+      page-break-inside: avoid;
+    }
+
+    .section-title {
+      font-size: 14pt;
+      font-weight: 700;
+      color: var(--green-dark);
+      border-bottom: 2px solid var(--green);
+      padding-bottom: 6px;
+      margin-bottom: 1rem;
+    }
+
+    .section-title .num {
+      display: inline-block;
+      background: var(--green);
+      color: #fff;
+      font-size: 9pt;
+      font-weight: 700;
+      border-radius: 4px;
+      padding: 1px 7px;
+      margin-right: 8px;
+    }
+
+    h3 {
+      font-size: 10.5pt;
+      font-weight: 700;
+      color: var(--gray-dark);
+      margin: 1rem 0 0.4rem;
+    }
+
+    p { margin-bottom: 0.7rem; font-size: 9.5pt; color: var(--gray-mid); }
+
+    ul, ol {
+      padding-left: 1.4rem;
+      margin-bottom: 0.8rem;
+    }
+
+    li {
+      font-size: 9.5pt;
+      color: var(--gray-mid);
+      margin-bottom: 3px;
+    }
+
+    code {
+      font-family: "Courier New", monospace;
+      font-size: 8.5pt;
+      background: #EDF2F7;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 5px;
+      color: #2D3748;
+    }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1rem;
+      font-size: 9pt;
+      page-break-inside: avoid;
+    }
+
+    thead tr {
+      background: var(--green);
+      color: #fff;
+    }
+
+    thead th {
+      padding: 8px 12px;
+      text-align: left;
+      font-weight: 700;
+      font-size: 8.5pt;
+      letter-spacing: 0.04em;
+    }
+
+    tbody tr:nth-child(even) { background: var(--gray-light); }
+    tbody tr:nth-child(odd) { background: #fff; }
+
+    tbody td {
+      padding: 7px 12px;
+      border-bottom: 1px solid var(--border);
+      color: var(--gray-mid);
+      vertical-align: top;
+    }
+
+    tbody td:first-child {
+      font-weight: 600;
+      color: var(--gray-dark);
+      white-space: nowrap;
+    }
+
+    /* Info box */
+    .box {
+      background: var(--green-light);
+      border-left: 4px solid var(--green);
+      border-radius: 0 6px 6px 0;
+      padding: 10px 14px;
+      margin-bottom: 1rem;
+      font-size: 9pt;
+      color: var(--gray-mid);
+    }
+
+    .box strong { color: var(--green-dark); }
+
+    /* Architecture diagram */
+    .arch {
+      background: var(--gray-dark);
+      color: #A0AEC0;
+      border-radius: 6px;
+      padding: 16px 20px;
+      font-family: "Courier New", monospace;
+      font-size: 8pt;
+      line-height: 1.7;
+      margin-bottom: 1rem;
+      overflow: hidden;
+    }
+
+    .arch .hl { color: #68D391; font-weight: 700; }
+
+    /* Pill badges for levels */
+    .pill {
+      display: inline-block;
+      font-size: 7.5pt;
+      font-weight: 700;
+      border-radius: 10px;
+      padding: 1px 8px;
+      margin-right: 3px;
+    }
+    .pill-bronze { background: #FDE8D0; color: #92400E; }
+    .pill-silver { background: #E8EDF5; color: #374151; }
+    .pill-gold   { background: #FEF3C7; color: #92400E; }
+    .pill-plat   { background: #E0E7FF; color: #3730A3; }
+
+    /* Print button */
+    .print-btn {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--green);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 10pt;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      font-family: var(--font);
+      z-index: 999;
+    }
+    .print-btn:hover { background: var(--green-dark); }
+
+    /* Footer */
+    .page-footer {
+      margin-top: 3rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border);
+      font-size: 8pt;
+      color: #A0AEC0;
+      text-align: center;
+    }
+
+    /* Print styles */
+    @media print {
+      html { font-size: 9.5pt; }
+
+      .print-btn { display: none !important; }
+
+      .cover {
+        min-height: 100vh;
+        page-break-after: always;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .content { padding: 0; }
+
+      .section { page-break-inside: avoid; }
+
+      table { page-break-inside: avoid; }
+
+      thead { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+      tbody tr:nth-child(even) {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .arch {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .box {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+
+      .section-title .num {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+    }
+
+    @page {
+      size: A4;
+      margin: 2cm;
+    }
+  </style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-badge">Documento de Alcance</div>
+  <h1>Kueski <span>Smart</span> Widget</h1>
+  <p class="subtitle">Extension de Chrome para incrementar la frecuencia de uso de Kueski Pay en comercios digitales</p>
+  <div class="cover-divider"></div>
+  <div class="cover-links">
+    <a href="https://github.com/a01647336/kueki-widget" target="_blank">github.com/a01647336/kueki-widget</a>
+    <a href="https://a01647336.github.io/kueki-widget/" target="_blank">a01647336.github.io/kueki-widget</a>
+  </div>
+  <div class="cover-meta">
+    <strong>Equipo</strong><br>
+    Isaac Daniel Chavez Mares &nbsp;|&nbsp; Gabriela Ruelas Gaytan<br>
+    Emilio Guzman Flores &nbsp;|&nbsp; Samantha Mailen Gallardo Mota<br><br>
+    <strong>Materia</strong><br>
+    Construccion de Software y Toma de Decisiones (Gpo 501)<br>
+    Tecnologico de Monterrey<br><br>
+    <strong>Fecha</strong><br>
+    Junio 2026
+  </div>
+</div>
+
+<!-- CONTENT -->
+<div class="content">
+
+  <!-- 1. Contexto -->
+  <div class="section">
+    <div class="section-title"><span class="num">1</span> Contexto y Problema</div>
+    <p>
+      Kueski es una plataforma de financiamiento digital que permite a sus usuarios pagar en comercios afiliados de forma flexible mediante cuotas quincenales sin intereses. Uno de los retos clave del negocio es la <strong>baja recurrencia de uso</strong>: los usuarios recurren al servicio solo en situaciones de urgencia y despues lo olvidan.
+    </p>
+    <p>Este proyecto propone atacar ese problema con tres palancas de valor:</p>
+    <ul>
+      <li><strong>Mas transacciones</strong> — recordatorios contextuales que aparecen en el momento exacto de la compra, cuando el usuario tiene items en el carrito.</li>
+      <li><strong>Menos friccion</strong> — simulacion de planes de pago sin salir del sitio de e-commerce.</li>
+      <li><strong>Mas recurrencia</strong> — sistema de gamificacion (Score Coach) que premia volver a usar Kueski con puntos, niveles y logros.</li>
+    </ul>
+    <div class="box">
+      <strong>Sitios compatibles:</strong> Amazon, Mercado Libre, Liverpool, Coppel y Elektra (todos en dominio .com.mx). El widget se activa automaticamente al detectar cualquiera de estos sitios.
+    </div>
+    <p style="font-size:8.5pt; color: #718096; font-style: italic;">
+      Nota: este es un proyecto academico con fines de simulacion. No usa datos reales de Kueski ni esta afiliado a la empresa. No publicado en la Chrome Web Store.
+    </p>
+  </div>
+
+  <!-- 2. Objetivo -->
+  <div class="section">
+    <div class="section-title"><span class="num">2</span> Objetivo del Proyecto</div>
+    <p>
+      Disenar y construir un widget funcional de Google Chrome que, al ser instalado por un usuario, genere mas transacciones para Kueski influyendo positivamente en el comportamiento de compra durante la navegacion en sitios de e-commerce.
+    </p>
+    <p>Requisitos del brief original (Kueski, enero 2026):</p>
+    <ul>
+      <li>Widget funcional de Chrome (Manifest V3)</li>
+      <li>Backend con informacion dinamica (API REST)</li>
+      <li>Persistencia de datos mediante base de datos relacional</li>
+      <li>Propuesta clara de valor de negocio</li>
+    </ul>
+  </div>
+
+  <!-- 3. Arquitectura -->
+  <div class="section">
+    <div class="section-title"><span class="num">3</span> Arquitectura del Sistema</div>
+    <div class="arch">
+<span class="hl">Extension de Chrome</span>  (Plasmo + React 18 + TypeScript)
+  |  Content Script (kueski.tsx) inyectado en sitios compatibles
+  |  Shadow DOM — estilos del widget aislados del sitio anfitri&oacute;n
+  |  MutationObserver — detecta cambios en el carrito en tiempo real
+  |  @plasmohq/storage — chrome.storage.local con fallback a localStorage
+  |
+  |  HTTPS  /  Bearer JWT  /  timeout 8 s (offline fallback)
+  |
+<span class="hl">API REST</span>  (Express 4 + Node.js, desplegado en Render)
+  |  20 endpoints: auth, usuario, deals, compras, calendario de pagos, health
+  |  JWT HS256 para autenticacion sin estado
+  |  Reglas de elegibilidad y calculo de planes en servidor
+  |
+<span class="hl">Base de Datos</span>  (PostgreSQL en Aiven, plan gratuito)
+       3 tablas: users, purchases, deals
+       5 usuarios semilla con distintos niveles y estados
+    </div>
+    <h3>Flujo principal de uso</h3>
+    <ol>
+      <li>El usuario instala la extension en Chrome desde <code>chrome://extensions</code>.</li>
+      <li>Al navegar a un sitio compatible, Plasmo inyecta el content script.</li>
+      <li><code>PriceDetector</code> arranca un <code>MutationObserver</code> que lee el DOM con selectores especificos por tienda (debounce 500 ms).</li>
+      <li>El widget se monta dentro de un Shadow DOM como panel flotante (esquina inferior derecha).</li>
+      <li>Si el usuario no tiene sesion, el widget muestra la pantalla de beneficios con CTA de login.</li>
+      <li>Tras autenticarse, el widget detecta el carrito y ofrece simular el pago con Kueski Pay.</li>
+      <li>El usuario selecciona un plan quincenal y confirma; la compra se registra en el backend.</li>
+    </ol>
+  </div>
+
+  <!-- 4. Funciones -->
+  <div class="section">
+    <div class="section-title"><span class="num">4</span> Funciones y Caracteristicas Principales</div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:22%">Funcion</th>
+          <th>Descripcion</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Smart Reminder</td>
+          <td>Detecta en tiempo real si el usuario tiene items en el carrito del sitio actual y muestra un banner contextual con el monto total y un boton para simular el pago. Incluye alerta de vencimiento de pago (azul si faltan 7+ dias, ambar si faltan 3 o menos).</td>
+        </tr>
+        <tr>
+          <td>Recordatorios de Pago</td>
+          <td>Panel accesible desde el icono de campana en el header del widget (solo con sesion activa). Lista todas las quincenas pendientes con sitio, monto, fecha de vencimiento y boton de pago simulado. Al pagar, el credito disponible se restaura y el proximo pago se recalcula en tiempo real sin re-login. El badge sobre la campana muestra cuantos pagos hay pendientes. Funciona offline usando los datos locales como fallback.</td>
+        </tr>
+        <tr>
+          <td>Simulador de Pagos</td>
+          <td>Calcula planes de pago quincenales personalizados segun el nivel y credito disponible del usuario: de 2 a 12 cuotas sin intereses. Muestra el cashback que se ganara. Incluye flujo de confirmacion en dos pasos y validacion de elegibilidad (credito insuficiente, pago vencido, monto menor a $50, demasiadas compras activas). Tras confirmar, el credito disponible se actualiza de forma optimista y se sincroniza con el backend.</td>
+        </tr>
+        <tr>
+          <td>Score Coach</td>
+          <td>Sistema de gamificacion con 4 niveles progresivos. Otorga puntos por compra, pago puntual, racha de 30 dias y referidos. Los logros muestran su progreso real con barra animada (ej. "Usa Kueski Pay 3 veces" muestra 1/3, 2/3, etc.) y se completan automaticamente al cumplir la condicion. El logro de pago puntual se desbloquea al pagar la primera quincena; el de referido tiene un boton de accion directa. Cada nivel desbloquea mayor tasa de cashback y limite de credito.</td>
+        </tr>
+        <tr>
+          <td>Buscador de Deals</td>
+          <td>Muestra ofertas promocionales activas del backend. La tarjeta de oferta activa usa colores de marca fijos por tienda (definidos en el frontend) para garantizar legibilidad inmediata sin depender del campo de color del backend. Las tarjetas son interactivas y abren el sitio de la oferta en una pestana nueva.</td>
+        </tr>
+        <tr>
+          <td>Perfil de Usuario</td>
+          <td>Muestra nombre, nivel actual, credito disponible y limite, fecha y monto del proximo pago derivado del calendario de pagos activos, tasa de cashback por nivel y historial de compras. El credito disponible y el proximo pago se actualizan en vivo tras cada compra o pago de quincena.</td>
+        </tr>
+        <tr>
+          <td>Autenticacion</td>
+          <td>Login con usuario y contrasena. Contrasenas almacenadas con bcryptjs (10 rondas). Sesion persistida en chrome.storage.local con fallback a localStorage. Renovacion de token via refresh-token endpoint.</td>
+        </tr>
+        <tr>
+          <td>Deteccion de Carrito</td>
+          <td>MutationObserver con selectores CSS especificos para cada tienda. Funciona en SPAs interceptando history.pushState (Mercado Libre). Actualizacion con debounce de 500 ms para evitar re-renders excesivos.</td>
+        </tr>
+        <tr>
+          <td>Modo Offline</td>
+          <td>Si el servidor no responde en 8 segundos, el widget continua funcionando con datos locales (localStorage). El calculo de planes usa la misma logica que el backend, replicada en el frontend. No se muestran errores de red al usuario.</td>
+        </tr>
+        <tr>
+          <td>Pantalla de Beneficios</td>
+          <td>Vista de onboarding que explica el valor del widget a usuarios no autenticados: simulacion de pagos, cashback, notificaciones de deals y Score Coach. Incluye CTA de login y enlace al sitio real de Kueski para registro.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 5. Stack -->
+  <div class="section">
+    <div class="section-title"><span class="num">5</span> Stack Tecnologico</div>
+
+    <table>
+      <thead>
+        <tr><th style="width:22%">Capa</th><th style="width:30%">Tecnologia</th><th>Proposito</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Extension</td><td>Plasmo 0.90 (MV3)</td><td>Framework para extensiones Chrome con hot reload y Shadow DOM</td></tr>
+        <tr><td>Frontend</td><td>React 18 + TypeScript 5.3</td><td>Componentes declarativos con tipado estricto</td></tr>
+        <tr><td>Estilos</td><td>Tailwind CSS v3 + Radix UI</td><td>Utilidades CSS confinadas al Shadow DOM; componentes accesibles</td></tr>
+        <tr><td>Animaciones</td><td>Framer Motion (motion/react)</td><td>Transiciones de tabs, barras de progreso animadas</td></tr>
+        <tr><td>Iconos</td><td>Lucide React</td><td>Iconografia consistente y ligera</td></tr>
+        <tr><td>Storage local</td><td>@plasmohq/storage</td><td>Abstraccion sobre chrome.storage.local con fallback a localStorage</td></tr>
+        <tr><td>Backend</td><td>Node.js + Express 4</td><td>API REST con 20 endpoints y manejo de errores asincrono</td></tr>
+        <tr><td>Base de datos</td><td>PostgreSQL (Aiven)</td><td>Persistencia real multiusuario; queries SQL nativas sin ORM</td></tr>
+        <tr><td>Autenticacion</td><td>bcryptjs + JWT HS256</td><td>Hash de contrasenas y tokens de sesion sin estado</td></tr>
+        <tr><td>Deploy backend</td><td>Render (Web Service)</td><td>Hosting en la nube del servidor Express</td></tr>
+        <tr><td>Pruebas</td><td>Vitest 4 + Testing Library + Supertest + pg-mem</td><td>Suite completa: unit, hooks, componentes e integracion</td></tr>
+        <tr><td>Build tool</td><td>Vite 6.3</td><td>Bundling rapido para extension y servidor de desarrollo</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 6. API -->
+  <div class="section">
+    <div class="section-title"><span class="num">6</span> API REST</div>
+    <p>
+      <strong>Base URL (produccion):</strong> <code>https://kueski-widget-api.onrender.com/api</code><br>
+      Todos los endpoints excepto <code>/auth/login</code>, <code>/auth/refresh-token</code> y <code>/health</code> requieren cabecera <code>Authorization: Bearer &lt;JWT&gt;</code>.
+    </p>
+
+    <table>
+      <thead>
+        <tr><th style="width:12%">Grupo</th><th style="width:12%">Metodo</th><th style="width:32%">Ruta</th><th>Descripcion</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Auth</td><td>POST</td><td>/auth/login</td><td>Retorna accessToken + refreshToken + perfil</td></tr>
+        <tr><td>Auth</td><td>POST</td><td>/auth/logout</td><td>Invalida la sesion actual</td></tr>
+        <tr><td>Auth</td><td>POST</td><td>/auth/refresh-token</td><td>Renueva el access token</td></tr>
+        <tr><td>Usuario</td><td>GET</td><td>/user</td><td>Perfil completo del usuario autenticado</td></tr>
+        <tr><td>Usuario</td><td>GET/PUT</td><td>/user/preferences</td><td>Sitios desactivados y preferencias de notificaciones</td></tr>
+        <tr><td>Usuario</td><td>GET/PUT</td><td>/user/score</td><td>Puntos, nivel y logros</td></tr>
+        <tr><td>Usuario</td><td>POST</td><td>/user/achievements/:id/complete</td><td>Marca un logro como completado (idempotente)</td></tr>
+        <tr><td>Usuario</td><td>GET</td><td>/user/cashback</td><td>Total de cashback acumulado y desglose por compra</td></tr>
+        <tr><td>Deals</td><td>GET</td><td>/deals?site=&lt;tienda&gt;</td><td>Promociones activas; marca el deal del sitio actual</td></tr>
+        <tr><td>Deals</td><td>POST</td><td>/deals/:id/subscribe</td><td>Suscripcion del usuario a alertas de un deal</td></tr>
+        <tr><td>Compras</td><td>POST</td><td>/purchases/calculate-plans</td><td>Calcula planes personalizados + estado de elegibilidad</td></tr>
+        <tr><td>Compras</td><td>POST</td><td>/purchases</td><td>Registra una compra confirmada, descuenta credito</td></tr>
+        <tr><td>Compras</td><td>GET</td><td>/purchases</td><td>Historial del usuario (filtrable por estado y sitio)</td></tr>
+        <tr><td>Compras</td><td>GET</td><td>/purchases/:id</td><td>Detalle de una compra especifica</td></tr>
+        <tr><td>Compras</td><td>PUT</td><td>/purchases/:id/status</td><td>Actualiza estado: activo / pagado / vencido</td></tr>
+        <tr><td>Calendario</td><td>GET</td><td>/user/payments/upcoming</td><td>Proximos pagos pendientes derivados del calendario quincenal</td></tr>
+        <tr><td>Calendario</td><td>POST</td><td>/purchases/:id/pay-installment</td><td>Paga la siguiente quincena; restaura credito disponible</td></tr>
+        <tr><td>Sistema</td><td>GET</td><td>/health</td><td>Verificacion de disponibilidad del servidor</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 7. DB -->
+  <div class="section">
+    <div class="section-title"><span class="num">7</span> Base de Datos</div>
+    <p>PostgreSQL alojado en Aiven (plan gratuito). Tres tablas principales inicializadas al arrancar el servidor.</p>
+
+    <table>
+      <thead>
+        <tr><th style="width:20%">Tabla</th><th style="width:30%">Columnas clave</th><th>Descripcion</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>users</td>
+          <td>id, username, password_hash, name, level, credit_limit, available_credit, cashback_rate, score_points, next_payment_date, next_payment_amount, achievements (JSON), disabled_sites (JSON), notif_deals, notif_reminders, subscriptions (JSON)</td>
+          <td>Perfil completo del usuario. Arrays complejos almacenados como TEXT JSON para simplicidad sin ORM.</td>
+        </tr>
+        <tr>
+          <td>purchases</td>
+          <td>id, user_id (FK), site, amount, plan (num. cuotas), payment_per_period, cashback, date, status, installments_paid</td>
+          <td>Registro de compras realizadas con Kueski Pay. Estado puede ser activo, pagado o vencido. El campo installments_paid permite derivar el calendario de pagos: el proximo vencimiento se calcula como fecha_compra + 15*(installments_paid+1) dias.</td>
+        </tr>
+        <tr>
+          <td>deals</td>
+          <td>id, site, title, description, discount, tag, color, active</td>
+          <td>Promociones configuradas por tienda. El flag active permite activar/desactivar sin borrar.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 8. Gamificacion -->
+  <div class="section">
+    <div class="section-title"><span class="num">8</span> Sistema de Niveles y Puntos (Score Coach)</div>
+
+    <table>
+      <thead>
+        <tr><th>Nivel</th><th>Rango de puntos</th><th>Cashback</th><th>Limite de credito</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="pill pill-bronze">Bronce</span></td>
+          <td>0 – 499 pts</td>
+          <td>0.5 %</td>
+          <td>$3,000 MXN</td>
+        </tr>
+        <tr>
+          <td><span class="pill pill-silver">Plata</span></td>
+          <td>500 – 1,499 pts</td>
+          <td>1.5 %</td>
+          <td>$8,000 MXN</td>
+        </tr>
+        <tr>
+          <td><span class="pill pill-gold">Oro</span></td>
+          <td>1,500 – 3,999 pts</td>
+          <td>3.0 %</td>
+          <td>$15,000 MXN</td>
+        </tr>
+        <tr>
+          <td><span class="pill pill-plat">Platino</span></td>
+          <td>4,000+ pts</td>
+          <td>5.0 %</td>
+          <td>$25,000 MXN</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Puntos por accion</h3>
+    <table>
+      <thead><tr><th>Accion</th><th>Puntos</th></tr></thead>
+      <tbody>
+        <tr><td>Compra realizada</td><td>+50</td></tr>
+        <tr><td>Pago puntual</td><td>+25</td></tr>
+        <tr><td>Compra completada (pagada al 100%)</td><td>+100</td></tr>
+        <tr><td>Racha de 30 dias usando Kueski</td><td>+150</td></tr>
+        <tr><td>Referido exitoso</td><td>+300</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 9. Pruebas -->
+  <div class="section">
+    <div class="section-title"><span class="num">9</span> Cobertura de Pruebas</div>
+    <p><strong>144 pruebas</strong> en 13 archivos con Vitest 4. Todas pasan.</p>
+
+    <table>
+      <thead><tr><th>Tipo</th><th>Archivo</th><th>Pruebas</th></tr></thead>
+      <tbody>
+        <tr><td>Unitarias</td><td>payments.test.ts</td><td>16 — logica de calculo de planes y cashback</td></tr>
+        <tr><td>Unitarias</td><td>constants.test.ts</td><td>19 — reglas de negocio y constantes</td></tr>
+        <tr><td>Unitarias</td><td>storage.test.ts</td><td>12 — persistencia local y serializacion</td></tr>
+        <tr><td>Hooks</td><td>useAuth.test.ts</td><td>8 — login, logout, renovacion de token</td></tr>
+        <tr><td>Hooks</td><td>useScore.test.ts</td><td>12 — puntos, niveles, logros</td></tr>
+        <tr><td>Hooks</td><td>useCart.test.ts</td><td>10 — deteccion y deduplicacion del carrito</td></tr>
+        <tr><td>Componentes</td><td>AuthModal.test.tsx</td><td>8 — formulario de login y errores</td></tr>
+        <tr><td>Componentes</td><td>PaymentSimulator.test.tsx</td><td>12 — flujo de simulacion y confirmacion</td></tr>
+        <tr><td>Componentes</td><td>KueskiBenefits.test.tsx</td><td>6 — pantalla de onboarding</td></tr>
+        <tr><td>Integracion</td><td>server.test.ts</td><td>18 — 18 endpoints con base de datos en memoria (pg-mem)</td></tr>
+        <tr><td>Integracion</td><td>api.test.ts</td><td>11 — cliente HTTP y manejo de errores</td></tr>
+        <tr><td>Integracion</td><td>eligibility.test.ts</td><td>11 — 11 escenarios de rechazo de elegibilidad</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 10. Cuentas demo -->
+  <div class="section">
+    <div class="section-title"><span class="num">10</span> Cuentas de Demostracion</div>
+
+    <table>
+      <thead><tr><th>Usuario</th><th>Nivel</th><th>Credito disponible</th><th>Estado de pago</th></tr></thead>
+      <tbody>
+        <tr><td>carlos</td><td><span class="pill pill-bronze">Bronce</span></td><td>$2,500 MXN</td><td>Al corriente</td></tr>
+        <tr><td>ana</td><td><span class="pill pill-silver">Plata</span></td><td>$6,000 MXN</td><td>Al corriente</td></tr>
+        <tr><td>diego</td><td><span class="pill pill-gold">Oro</span></td><td>$12,000 MXN</td><td>Al corriente</td></tr>
+        <tr><td>sofia</td><td><span class="pill pill-plat">Platino</span></td><td>$20,000 MXN</td><td>Al corriente</td></tr>
+        <tr><td>pedro</td><td><span class="pill pill-silver">Plata</span></td><td>$5,000 MXN</td><td>Pago vencido</td></tr>
+      </tbody>
+    </table>
+    <p style="font-size:8.5pt; color:#718096;">Contrasena de todas las cuentas: el mismo nombre de usuario (ej. carlos / carlos). Datos simulados; no corresponden a usuarios reales de Kueski.</p>
+  </div>
+
+  <!-- 11. Recursos -->
+  <div class="section">
+    <div class="section-title"><span class="num">11</span> Recursos del Proyecto</div>
+    <table>
+      <thead><tr><th>Recurso</th><th>URL</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Repositorio GitHub</td>
+          <td><code>https://github.com/a01647336/kueki-widget</code></td>
+        </tr>
+        <tr>
+          <td>Landing Page</td>
+          <td><code>https://a01647336.github.io/kueki-widget/</code></td>
+        </tr>
+        <tr>
+          <td>API (produccion)</td>
+          <td><code>https://kueski-widget-api.onrender.com/api</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="page-footer">
+    Kueski Smart Widget &mdash; Proyecto academico &mdash; Construccion de Software y Toma de Decisiones (Gpo 501) &mdash; Tecnologico de Monterrey &mdash; Junio 2026
+  </div>
+
+</div>
+
+<button class="print-btn" onclick="window.print()">Guardar como PDF</button>
+
+</body>
+</html>

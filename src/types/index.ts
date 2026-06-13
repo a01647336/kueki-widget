@@ -39,7 +39,21 @@ export interface Purchase {
   paymentPerPeriod: number;
   date: string;
   cashback: number;
-  status: 'activo' | 'pagado';
+  status: 'activo' | 'pagado' | 'vencido';
+  dealId?: string | number | null;
+  installmentsPaid?: number;
+}
+
+export interface UpcomingPayment {
+  purchaseId: string;
+  site: string;
+  amount: number;
+  dueDate: string;
+  installmentNumber: number;
+  totalInstallments: number;
+  remaining: number;
+  overdue: boolean;
+  daysUntilDue: number;
 }
 
 export interface UserPreferences {

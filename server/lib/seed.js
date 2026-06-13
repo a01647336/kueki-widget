@@ -8,11 +8,11 @@ const bcrypt = require('bcryptjs');
 const rules = require('./rules');
 
 const DEALS = [
-  { id: 1, site: 'amazon', title: 'Pago diferido disponible', description: 'Compra ahora y paga en 4 quincenas sin intereses', discount: 'Sin intereses', tag: 'Kueski Pay', color: 'from-orange-500 to-orange-600', active: true },
-  { id: 2, site: 'mercadolibre', title: '3 MSI + Cashback 5%', description: 'Meses sin intereses + reembolso en tu siguiente compra', discount: '5% cashback', tag: 'Oferta especial', color: 'from-yellow-400 to-yellow-500', active: true },
-  { id: 3, site: 'liverpool', title: 'Envio gratis con Kueski', description: 'Paga con Kueski Pay y obtén envío sin costo', discount: 'Envio gratis', tag: 'Beneficio', color: 'from-red-500 to-red-600', active: true },
-  { id: 4, site: 'coppel', title: 'Hasta 6 MSI', description: 'Meses sin intereses en compras mayores a $1,500', discount: '6 MSI', tag: 'Disponible', color: 'from-blue-500 to-blue-600', active: true },
-  { id: 5, site: 'elektra', title: 'Paga a plazos con 0% interes', description: 'Hasta 4 quincenas sin intereses en electronica y mas', discount: '0% interes', tag: 'Kueski Pay', color: 'from-red-600 to-pink-600', active: true },
+  { id: 1, site: 'amazon',       title: 'Pago diferido disponible',      description: 'Compra ahora y paga en 4 quincenas sin intereses',      discount: 'Sin intereses', tag: 'Kueski Pay',     color: 'from-orange-500 to-orange-600', active: true, discount_type: 'no_interest',          discount_value: 0   },
+  { id: 2, site: 'mercadolibre', title: '3 MSI + Cashback 5%',           description: 'Meses sin intereses + reembolso en tu siguiente compra', discount: '5% cashback',  tag: 'Oferta especial', color: 'from-yellow-400 to-yellow-500', active: true, discount_type: 'cashback_bonus',       discount_value: 0.05 },
+  { id: 3, site: 'liverpool',    title: 'Envio gratis con Kueski',        description: 'Paga con Kueski Pay y obtén envío sin costo',            discount: 'Envio gratis', tag: 'Beneficio',       color: 'from-red-500 to-red-600',       active: true, discount_type: 'free_shipping',        discount_value: 199 },
+  { id: 4, site: 'coppel',       title: 'Hasta 6 MSI',                   description: 'Meses sin intereses en compras mayores a $1,500',       discount: '6 MSI',        tag: 'Disponible',      color: 'from-blue-500 to-blue-600',     active: true, discount_type: 'unlock_installments',  discount_value: 6   },
+  { id: 5, site: 'elektra',      title: 'Paga a plazos con 0% interes',  description: 'Hasta 4 quincenas sin intereses en electronica y mas',  discount: '0% interes',   tag: 'Kueski Pay',      color: 'from-red-600 to-pink-600',      active: true, discount_type: 'no_interest',          discount_value: 0   },
 ];
 
 // Logros comunes — cada usuario recibe una copia con su estado de completado.
@@ -43,12 +43,20 @@ async function seedDatabase(pool) {
   if (Number(dealCount[0].n) === 0) {
     for (const d of DEALS) {
       await pool.query(
-        `INSERT INTO deals (id, site, title, description, discount, tag, color, active)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-        [d.id, d.site, d.title, d.description, d.discount, d.tag, d.color, d.active]
+        `INSERT INTO deals (id, site, title, description, discount, tag, color, active, discount_type, discount_value)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [d.id, d.site, d.title, d.description, d.discount, d.tag, d.color, d.active, d.discount_type, d.discount_value]
       );
     }
     console.log('[seed] Deals sembrados');
+  } else {
+    // Backfill para BD ya existente que no tenga discount_type/discount_value.
+    for (const d of DEALS) {
+      await pool.query(
+        `UPDATE deals SET discount_type=$1, discount_value=$2 WHERE id=$3 AND (discount_type IS NULL OR discount_type='')`,
+        [d.discount_type, d.discount_value, d.id]
+      );
+    }
   }
 
   // Users
@@ -80,51 +88,56 @@ async function seedDatabase(pool) {
       );
 
       // Historial de compras por usuario.
+      // installments_paid siembra valores que ubican el próximo pago cerca de 2026-06-12.
+      //   carlos:  amazon  2026-05-10 plan=4 paid=2 → próximo vence 2026-06-24 (15*3=45d)
+      //   ana:     mercado 2026-05-18 plan=4 paid=1 → próximo vence 2026-06-17 (15*2=30d)
+      //   diego:   amazon  2026-04-05 plan=8 paid=4 → próximo vence 2026-06-19 (15*5=75d)
+      //   diego:   coppel  2026-05-01 plan=6 paid=2 → próximo vence 2026-06-15 (15*3=45d)
+      //   sofia:   elektra 2026-05-25 plan=8 paid=1 → próximo vence 2026-06-24 (15*2=30d)
       if (u.mora) {
-        // pedro: compra vencida para demostrar el rechazo por mora.
         await pool.query(
-          `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          ['seed_pedro_vencida', id, 'coppel', 1200, 4, 300, 18, '2026-04-15T10:00:00.000Z', 'vencido']
+          `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status, installments_paid)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          ['seed_pedro_vencida', id, 'coppel', 1200, 4, 300, 18, '2026-04-15T10:00:00.000Z', 'vencido', 0]
         );
       } else if (u.username === 'carlos') {
         await pool.query(
-          `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          ['seed_carlos_1', id, 'amazon', 1200, 4, 300, 6, '2026-05-10T12:00:00.000Z', 'activo']
+          `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status, installments_paid)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          ['seed_carlos_1', id, 'amazon', 1200, 4, 300, 6, '2026-05-10T12:00:00.000Z', 'activo', 2]
         );
       } else if (u.username === 'ana') {
         await pool.query(
-          `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          ['seed_ana_1', id, 'liverpool', 3500, 6, 583.34, 52.5, '2026-03-20T10:00:00.000Z', 'pagado']
+          `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status, installments_paid)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          ['seed_ana_1', id, 'liverpool', 3500, 6, 583.34, 52.5, '2026-03-20T10:00:00.000Z', 'pagado', 6]
         );
         await pool.query(
-          `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          ['seed_ana_2', id, 'mercadolibre', 2100, 4, 525, 31.5, '2026-05-18T15:00:00.000Z', 'activo']
+          `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status, installments_paid)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          ['seed_ana_2', id, 'mercadolibre', 2100, 4, 525, 31.5, '2026-05-18T15:00:00.000Z', 'activo', 1]
         );
       } else if (u.username === 'diego') {
         await pool.query(
-          `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          ['seed_diego_1', id, 'amazon', 5800, 8, 736.13, 145, '2026-04-05T09:00:00.000Z', 'activo']
+          `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status, installments_paid)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          ['seed_diego_1', id, 'amazon', 5800, 8, 736.13, 145, '2026-04-05T09:00:00.000Z', 'activo', 4]
         );
         await pool.query(
-          `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          ['seed_diego_2', id, 'coppel', 4000, 6, 666.67, 100, '2026-05-01T11:00:00.000Z', 'activo']
+          `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status, installments_paid)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          ['seed_diego_2', id, 'coppel', 4000, 6, 666.67, 100, '2026-05-01T11:00:00.000Z', 'activo', 2]
         );
       } else if (u.username === 'sofia') {
         await pool.query(
-          `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          ['seed_sofia_1', id, 'liverpool', 12000, 12, 1015, 600, '2026-02-14T14:00:00.000Z', 'pagado']
+          `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status, installments_paid)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          ['seed_sofia_1', id, 'liverpool', 12000, 12, 1015, 600, '2026-02-14T14:00:00.000Z', 'pagado', 12]
         );
         await pool.query(
-          `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          ['seed_sofia_2', id, 'elektra', 8500, 8, 1078.75, 425, '2026-05-25T16:00:00.000Z', 'activo']
+          `INSERT INTO purchases (id, user_id, site, amount, plan, payment_per_period, cashback, date, status, installments_paid)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          ['seed_sofia_2', id, 'elektra', 8500, 8, 1078.75, 425, '2026-05-25T16:00:00.000Z', 'activo', 1]
         );
       }
     }

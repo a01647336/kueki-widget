@@ -13,10 +13,10 @@ function computeLevel(points: number): LevelName {
 }
 
 const DEFAULT_ACHIEVEMENTS: Achievement[] = [
-  { id: 'first-payment',   title: 'Primer pago a tiempo',           completed: false, points: 25  },
-  { id: 'three-purchases', title: 'Usa Kueski Pay 3 veces',         completed: false, points: 150 },
-  { id: 'thirty-days',     title: 'Mantén buen historial 30 días',  completed: false, points: 150 },
-  { id: 'referral',        title: 'Invita a un amigo',              completed: false, points: 300 },
+  { id: 'on-time-payment', title: 'Realiza tu siguiente pago a tiempo', completed: false, points: 25  },
+  { id: 'three-purchases', title: 'Usa Kueski Pay 3 veces',             completed: false, points: 150 },
+  { id: 'thirty-days',     title: 'Mantén buen historial 30 días',      completed: false, points: 150 },
+  { id: 'referral',        title: 'Invita a un amigo y gana puntos',    completed: false, points: 300 },
 ];
 
 function defaultState(): ScoreState {

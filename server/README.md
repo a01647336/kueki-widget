@@ -74,4 +74,12 @@ PLASMO_PUBLIC_API_URL=https://<app>.onrender.com/api npm run build
 | `POST` | `/api/purchases/calculate-plans` | Planes personalizados + **elegibilidad** |
 | `POST`/`GET` | `/api/purchases` | Registrar / listar compras (por usuario) |
 | `GET`/`PUT` | `/api/purchases/:id` · `/api/purchases/:id/status` | Detalle / estado |
+| `GET` | `/api/user/payments/upcoming` | Proximos pagos pendientes (derivados del calendario) |
+| `POST` | `/api/purchases/:id/pay-installment` | Pagar la siguiente quincena (restaura credito) |
 | `GET` | `/api/health` | Health check |
+
+## Notas de implementacion
+
+- **`nextPayment` dinamico:** el perfil del usuario devuelve `nextPayment` derivado del calendario de pagos activos, no de un campo estatico. Se calcula en cada `GET /api/user` y `POST /api/auth/login`.
+- **`installments_paid`:** columna en `purchases` que registra cuantas quincenas se han pagado. Al pagar una quincena via `/pay-installment`, se incrementa en 1 y el `available_credit` del usuario se restaura por `payment_per_period` (tope: `credit_limit`). Si `installments_paid >= plan` la compra pasa a `pagado`.
+- **Migracion idempotente:** `lib/db.js` corre `ALTER TABLE ... ADD COLUMN IF NOT EXISTS installments_paid` en cada arranque, compatible con bases ya existentes en Aiven.

@@ -39,9 +39,19 @@ export function useAuth() {
   const logout = useCallback(() => {
     storage.clearAuth();
     storage.clearScore();
-    void apiLogout(); // invalida la sesión en el server y limpia el token local
+    void apiLogout();
     setState({ isLoggedIn: false, user: null });
   }, []);
 
-  return { ...state, login, logout };
+  /** Actualiza campos parciales del usuario en memoria y storage (sin re-login). */
+  const updateUser = useCallback((partial: Partial<User>) => {
+    setState((prev) => {
+      if (!prev.user) return prev;
+      const updated: AuthState = { ...prev, user: { ...prev.user, ...partial } };
+      storage.setAuth(updated);
+      return updated;
+    });
+  }, []);
+
+  return { ...state, login, logout, updateUser };
 }

@@ -104,13 +104,14 @@ function round2(n) {
  * Calcula los planes de quincenas disponibles para un usuario, según su nivel
  * y crédito disponible.
  *
- * @param {number} cartTotal       Monto del carrito en MXN.
- * @param {string} level           Nivel del usuario.
- * @param {number} availableCredit Crédito disponible del usuario en MXN.
+ * @param {number} cartTotal            Monto del carrito en MXN.
+ * @param {string} level                Nivel del usuario.
+ * @param {number} availableCredit      Crédito disponible del usuario en MXN.
+ * @param {number} [maxInstallmentsOverride]  Para unlock_installments (deal).
  * @returns {{ approved: boolean, availableCredit: number, plans: object[] }}
  */
-function calculatePlans(cartTotal, level, availableCredit) {
-  const maxInstallments = LEVEL_MAX_INSTALLMENTS[level];
+function calculatePlans(cartTotal, level, availableCredit, maxInstallmentsOverride) {
+  const maxInstallments = maxInstallmentsOverride ?? LEVEL_MAX_INSTALLMENTS[level];
   const approved = cartTotal > 0 && cartTotal <= availableCredit;
 
   const plans = [2, 4, 6, 8, 12]
@@ -130,6 +131,56 @@ function calculatePlans(cartTotal, level, availableCredit) {
     });
 
   return { approved, availableCredit, plans };
+}
+
+/**
+ * Aplica el beneficio de un deal al cálculo de planes y cashback.
+ *
+ * Tipos soportados:
+ *   no_interest          → comisión 0 en todos los planes
+ *   cashback_bonus       → cashback += cartTotal * discount_value
+ *   free_shipping        → effectiveTotal = cartTotal - discount_value (mínimo $50)
+ *   unlock_installments  → amplía maxInstallments hasta discount_value
+ *
+ * @param {{ discount_type: string, discount_value: number, title: string, id: number }} deal
+ * @param {number} cartTotal
+ * @param {string} level
+ * @param {number} availableCredit
+ * @returns {{ effectiveTotal: number, plans: object[], cashback: number, appliedDeal: object|null }}
+ */
+function applyDeal(deal, cartTotal, level, availableCredit) {
+  let effectiveTotal = cartTotal;
+  let maxInstallmentsOverride;
+
+  if (deal.discount_type === 'free_shipping') {
+    effectiveTotal = Math.max(MIN_PURCHASE, cartTotal - deal.discount_value);
+  } else if (deal.discount_type === 'unlock_installments') {
+    maxInstallmentsOverride = Math.max(LEVEL_MAX_INSTALLMENTS[level], deal.discount_value);
+  }
+
+  let { plans } = calculatePlans(effectiveTotal, level, availableCredit, maxInstallmentsOverride);
+
+  if (deal.discount_type === 'no_interest') {
+    plans = plans.map((p) => ({
+      ...p,
+      commissionRate: 0,
+      commissionAmount: 0,
+      totalAmount: round2(effectiveTotal),
+      paymentPerPeriod: round2(effectiveTotal / p.periods),
+    }));
+  }
+
+  let cashback = calculateCashback(effectiveTotal, level);
+  if (deal.discount_type === 'cashback_bonus') {
+    cashback = round2(cashback + effectiveTotal * deal.discount_value);
+  }
+
+  return {
+    effectiveTotal,
+    plans,
+    cashback,
+    appliedDeal: { id: deal.id, title: deal.title, discountType: deal.discount_type, discountValue: deal.discount_value },
+  };
 }
 
 /** Cashback en MXN para un monto y nivel dados. */
@@ -169,6 +220,57 @@ function evaluateEligibility(user, cartTotal, purchases = []) {
   return { approved: true, reason: null, message: null };
 }
 
+/**
+ * Genera el calendario de pagos pendientes derivado de las compras activas.
+ * Cada quincena = 15 días desde la fecha de compra.
+ *
+ * @param {object[]} purchases Compras del usuario (deben tener date, plan, payment_per_period,
+ *                             installments_paid, status, id, site).
+ * @param {Date} [now=new Date()]
+ * @returns {object[]} Installments pendientes, ordenados por dueDate ASC.
+ */
+function buildPaymentSchedule(purchases, now = new Date()) {
+  const pending = [];
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+
+  for (const p of purchases) {
+    if (p.status !== 'activo') continue;
+    const paid = p.installments_paid ?? 0;
+    if (paid >= p.plan) continue;
+    const base = new Date(p.date);
+    for (let i = paid + 1; i <= p.plan; i++) {
+      const due = new Date(base);
+      due.setDate(due.getDate() + 15 * i);
+      due.setHours(0, 0, 0, 0);
+      const diffDays = Math.round((due - today) / 86_400_000);
+      pending.push({
+        purchaseId: p.id,
+        site: p.site,
+        amount: p.payment_per_period,
+        dueDate: due.toISOString(),
+        installmentNumber: i,
+        totalInstallments: p.plan,
+        remaining: p.plan - paid,
+        overdue: diffDays < 0,
+        daysUntilDue: diffDays,
+      });
+      break; // Solo el próximo pago de cada compra
+    }
+  }
+
+  pending.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+  return pending;
+}
+
+/** Devuelve el próximo pago único (el más urgente) entre todas las compras activas. */
+function nextPaymentFrom(purchases, now = new Date()) {
+  const schedule = buildPaymentSchedule(purchases, now);
+  if (!schedule.length) return null;
+  const next = schedule[0];
+  return { date: next.dueDate, amount: next.amount };
+}
+
 module.exports = {
   LEVEL_ORDER,
   LEVEL_THRESHOLDS,
@@ -185,4 +287,7 @@ module.exports = {
   calculatePlans,
   calculateCashback,
   evaluateEligibility,
+  applyDeal,
+  buildPaymentSchedule,
+  nextPaymentFrom,
 };

@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { CheckCircle2, Info, AlertTriangle } from 'lucide-react';
+import { motion } from 'motion/react';
+import { CheckCircle2, Info, AlertTriangle, Tag } from 'lucide-react';
 import type { LevelName, Purchase } from '../types';
-import { calculateInstallmentPlans, calculateCashback, formatMXN, type InstallmentPlan } from '../utils/payments';
+import { calculateInstallmentPlans, calculateCashback, applyDealOffline, formatMXN, type InstallmentPlan } from '../utils/payments';
 import { SITE_DISPLAY_NAMES } from '../constants/kueski';
-import { calculatePlans } from '../utils/api';
+import { calculatePlans, fetchDeals, type AppliedDeal } from '../utils/api';
 import { KueskiPayLogo } from './KueskiPayLogo';
 
 interface PaymentSimulatorProps {
@@ -34,26 +34,52 @@ export function PaymentSimulator({
   const [rejectMessage, setRejectMessage] = useState<string | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
+  const [appliedDeal, setAppliedDeal] = useState<AppliedDeal | null>(null);
+  const [effectiveTotal, setEffectiveTotal] = useState(cartTotal);
+  const [cashback, setCashback] = useState(() => calculateCashback(cartTotal, userLevel));
 
-  const cashback = calculateCashback(cartTotal, userLevel);
   const siteName = SITE_DISPLAY_NAMES[currentSite] ?? currentSite;
 
-  // El backend es la autoridad: recalcula los planes según el nivel y el
-  // crédito disponible del usuario, y evalúa la elegibilidad (mora, límite de
-  // compras, crédito, monto). Si no responde, usamos los planes locales.
+  // Offline: aplicar deal del sitio si está disponible antes de que responda el backend.
   useEffect(() => {
     let active = true;
-    calculatePlans(cartTotal).then((res) => {
+    fetchDeals(currentSite).then((deals) => {
+      if (!active || !deals) return;
+      const siteDeal = deals.find((d) => d.site === currentSite && d.discountType);
+      if (!siteDeal) return;
+      const offlineDeal: AppliedDeal = {
+        id: siteDeal.id, title: siteDeal.title,
+        discountType: siteDeal.discountType ?? '',
+        discountValue: siteDeal.discountValue,
+      };
+      const { effectiveTotal: et, plans: p, cashback: cb } = applyDealOffline(offlineDeal, cartTotal, userLevel);
+      if (!active) return;
+      setAppliedDeal(offlineDeal);
+      setEffectiveTotal(et);
+      setCashback(cb);
+      setPlans(p);
+      setSelectedPlan(p[1] ?? p[0]);
+    });
+    return () => { active = false; };
+  }, [cartTotal, currentSite, userLevel]);
+
+  // El backend es la autoridad: recalcula planes con deal, nivel, crédito y elegibilidad.
+  useEffect(() => {
+    let active = true;
+    calculatePlans(cartTotal, currentSite).then((res) => {
       if (!active || !res) return;
       setApproved(res.approved);
       setRejectMessage(res.approved ? null : res.message);
+      if (res.appliedDeal) setAppliedDeal(res.appliedDeal);
+      if (typeof res.effectiveTotal === 'number') setEffectiveTotal(res.effectiveTotal);
+      if (typeof res.cashback === 'number') setCashback(res.cashback);
       if (res.plans.length > 0) {
         setPlans(res.plans);
         setSelectedPlan(res.plans[1] ?? res.plans[0]);
       }
     });
     return () => { active = false; };
-  }, [cartTotal]);
+  }, [cartTotal, currentSite]);
 
   const handleFinalConfirm = () => {
     setShowConfirm(false);
@@ -61,13 +87,25 @@ export function PaymentSimulator({
     setTimeout(() => {
       onConfirm({
         site: siteName,
-        amount: cartTotal,
+        amount: effectiveTotal,
         plan: selectedPlan.periods,
         paymentPerPeriod: selectedPlan.paymentPerPeriod,
         cashback,
+        dealId: appliedDeal?.id ?? null,
       });
     }, 1500);
   };
+
+  /** Texto legible del beneficio del deal para mostrar en UI */
+  function dealBenefitLabel(deal: AppliedDeal): string {
+    switch (deal.discountType) {
+      case 'free_shipping':      return `Envio gratis: -${formatMXN(deal.discountValue)}`;
+      case 'cashback_bonus':     return `Cashback extra: +${(deal.discountValue * 100).toFixed(0)}%`;
+      case 'no_interest':        return 'Sin intereses en todos los planes';
+      case 'unlock_installments': return `Hasta ${deal.discountValue} quincenas disponibles`;
+      default: return deal.title;
+    }
+  }
 
   // Pantalla de confirmación previa
   if (showConfirm) {
@@ -87,10 +125,24 @@ export function PaymentSimulator({
             <span className="text-sm text-gray-600">Tienda</span>
             <span className="text-sm font-semibold text-gray-900">{siteName}</span>
           </div>
+          {effectiveTotal !== cartTotal && (
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-sm text-gray-600">Precio original</span>
+              <span className="text-sm text-gray-400 line-through">{formatMXN(cartTotal)}</span>
+            </div>
+          )}
           <div className="flex items-center justify-between px-4 py-3">
-            <span className="text-sm text-gray-600">Total</span>
-            <span className="text-sm font-bold text-gray-900">{formatMXN(cartTotal)}</span>
+            <span className="text-sm text-gray-600">Total a pagar</span>
+            <span className="text-sm font-bold text-gray-900">{formatMXN(effectiveTotal)}</span>
           </div>
+          {appliedDeal && (
+            <div className="flex items-center justify-between px-4 py-3 bg-emerald-50">
+              <span className="text-sm text-emerald-700 flex items-center gap-1">
+                <Tag className="w-3 h-3" /> Promocion
+              </span>
+              <span className="text-xs font-semibold text-emerald-700">{dealBenefitLabel(appliedDeal)}</span>
+            </div>
+          )}
           <div className="flex items-center justify-between px-4 py-3">
             <span className="text-sm text-gray-600">Plan</span>
             <span className="text-sm font-semibold text-gray-900">
@@ -146,8 +198,25 @@ export function PaymentSimulator({
     <div className="space-y-4">
       <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
         <p className="text-xs text-emerald-700 font-semibold mb-1">Total de tu carrito en {siteName}</p>
-        <p className="text-2xl font-bold text-gray-900">{formatMXN(cartTotal)}</p>
+        {effectiveTotal !== cartTotal ? (
+          <div className="flex items-baseline gap-2">
+            <p className="text-2xl font-bold text-gray-900">{formatMXN(effectiveTotal)}</p>
+            <p className="text-sm text-gray-400 line-through">{formatMXN(cartTotal)}</p>
+          </div>
+        ) : (
+          <p className="text-2xl font-bold text-gray-900">{formatMXN(cartTotal)}</p>
+        )}
       </div>
+
+      {appliedDeal && (
+        <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 flex items-start gap-2">
+          <Tag className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-bold text-emerald-800">{appliedDeal.title}</p>
+            <p className="text-xs text-emerald-700">{dealBenefitLabel(appliedDeal)}</p>
+          </div>
+        </div>
+      )}
 
       {!approved && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2">
@@ -199,6 +268,11 @@ export function PaymentSimulator({
           <p className="text-emerald-600 font-semibold">
             Cashback estimado ({userLevel}): {formatMXN(cashback)}
           </p>
+          {appliedDeal && (
+            <p className="text-emerald-700 font-semibold flex items-center gap-1">
+              <Tag className="w-3 h-3" /> {dealBenefitLabel(appliedDeal)}
+            </p>
+          )}
         </div>
       </div>
 

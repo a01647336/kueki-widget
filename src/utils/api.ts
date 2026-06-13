@@ -113,6 +113,8 @@ export interface ApiDeal {
   discount: string;
   tag: string;
   color: string;
+  discountType: string | null;
+  discountValue: number;
   isActive: boolean;
 }
 
@@ -125,11 +127,21 @@ export interface ApiPlan {
   requiresLevel: LevelName | null;
 }
 
+export interface AppliedDeal {
+  id: number;
+  title: string;
+  discountType: string;
+  discountValue: number;
+}
+
 export interface ApiPlansResponse {
   approved: boolean;
   reason: string | null;
   message: string | null;
   availableCredit: number;
+  effectiveTotal: number;
+  cashback: number;
+  appliedDeal: AppliedDeal | null;
   plans: ApiPlan[];
 }
 
@@ -225,11 +237,11 @@ export async function subscribeDeal(dealId: number): Promise<void> {
 
 // ─── 5. Compras ───────────────────────────────────────────────────────────────
 
-/** Pide al backend los planes de pago personalizados por nivel y crédito. */
-export async function calculatePlans(cartTotal: number): Promise<ApiPlansResponse | null> {
+/** Pide al backend los planes de pago personalizados por nivel, crédito y deal activo del sitio. */
+export async function calculatePlans(cartTotal: number, site?: string): Promise<ApiPlansResponse | null> {
   return apiFetch<ApiPlansResponse>('/purchases/calculate-plans', {
     method: 'POST',
-    body: body({ cartTotal }),
+    body: body({ cartTotal, site }),
   });
 }
 
@@ -245,6 +257,7 @@ export async function savePurchase(purchase: Purchase): Promise<void> {
       cashback: purchase.cashback,
       date: purchase.date,
       status: purchase.status,
+      dealId: purchase.dealId ?? null,
     }),
   });
 }
@@ -264,7 +277,38 @@ export async function updatePurchaseStatus(purchaseId: string, status: 'activo' 
   });
 }
 
-// ─── 6. Cashback ──────────────────────────────────────────────────────────────
+// ─── 6. Calendario de pagos ───────────────────────────────────────────────────
+
+export interface UpcomingPaymentApi {
+  purchaseId: string;
+  site: string;
+  amount: number;
+  dueDate: string;
+  installmentNumber: number;
+  totalInstallments: number;
+  remaining: number;
+  overdue: boolean;
+  daysUntilDue: number;
+}
+
+export interface PayInstallmentResult {
+  ok: boolean;
+  purchase: Purchase;
+  availableCredit: number;
+  nextPayment: { date: string; amount: number } | null;
+}
+
+export async function fetchUpcomingPayments(): Promise<UpcomingPaymentApi[] | null> {
+  return apiFetch<UpcomingPaymentApi[]>('/user/payments/upcoming');
+}
+
+export async function payInstallment(purchaseId: string): Promise<PayInstallmentResult | null> {
+  return apiFetch<PayInstallmentResult>(`/purchases/${encodeURIComponent(purchaseId)}/pay-installment`, {
+    method: 'POST',
+  });
+}
+
+// ─── 7. Cashback ──────────────────────────────────────────────────────────────
 
 export async function fetchCashback(): Promise<CashbackHistory | null> {
   return apiFetch<CashbackHistory>('/user/cashback');

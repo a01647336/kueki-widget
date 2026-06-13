@@ -29,7 +29,7 @@ Kueski sufre de **baja recurrencia de uso**: los usuarios recurren al servicio s
 | Animaciones | **Framer Motion** (motion/react) | Transiciones y barras de progreso animadas |
 | Iconos | **Lucide React** | Iconografia consistente |
 | Persistencia local | **@plasmohq/storage** | Abstraccion sobre chrome.storage.local con fallback a localStorage |
-| Backend | **Node.js** + **Express 4** | API REST con 18 endpoints |
+| Backend | **Node.js** + **Express 4** | API REST con 20 endpoints |
 | Base de datos | **PostgreSQL** (Aiven, plan gratuito) | Persistencia real multiusuario |
 | Driver BD | **pg** (node-postgres) | Queries SQL nativas sin ORM |
 | Autenticacion | **bcryptjs** + **JWT HS256** | Hash de contraseñas y tokens de sesion (crypto nativo) |
@@ -88,7 +88,7 @@ La extension sigue el modelo **content script + Shadow DOM** de Chrome MV3, gest
               ┌────────────▼──────────────┐
               │  Render (cloud hosting)   │
               │  Node.js + Express 4      │
-              │  server.js — 18 endpoints │
+              │  server.js — 20 endpoints │
               │  lib/jwt.js  — auth HS256 │
               │  lib/rules.js — negocio   │
               └────────────┬──────────────┘
@@ -117,8 +117,9 @@ kueki-widget/
 │   ├── components/
 │   │   ├── KueskiWidget.tsx      Contenedor flotante con tabs y header
 │   │   ├── SmartReminder.tsx     Recordatorio contextual + banner de pago proximo
+│   │   ├── PaymentReminders.tsx  Panel de proximos pagos pendientes (boton campana)
 │   │   ├── PaymentSimulator.tsx  Selector de planes + pantalla de confirmacion
-│   │   ├── ScoreCoach.tsx        Gamificacion: nivel, progreso y logros
+│   │   ├── ScoreCoach.tsx        Gamificacion: nivel, progreso y logros alcanzables
 │   │   ├── DealsFinder.tsx       Ofertas por tienda (tarjetas clickeables)
 │   │   ├── AuthModal.tsx         Login usuario/contraseña + link a Kueski
 │   │   ├── UserProfile.tsx       Perfil, credito, cashback e historial
@@ -126,13 +127,14 @@ kueki-widget/
 │   │   ├── KueskiBenefits.tsx    Pantalla de bienvenida sin sesion
 │   │   └── PurchaseHistory.tsx   Lista de compras confirmadas
 │   ├── hooks/
-│   │   ├── useAuth.ts            Estado de sesion (login/logout + persistencia)
+│   │   ├── useAuth.ts            Estado de sesion (login/logout/updateUser + persistencia)
 │   │   ├── useScore.ts           Score Coach: puntos, nivel, logros
 │   │   └── useCart.ts            Estado del carrito (solo para modo dev)
 │   ├── utils/
 │   │   ├── api.ts                Cliente HTTP con manejo de token y fallback
 │   │   ├── storage.ts            Abstraccion sobre @plasmohq/storage
-│   │   ├── payments.ts           Calculo de planes, cashback y formato MXN
+│   │   ├── payments.ts           Planes, cashback, calendario de pagos offline y formato MXN
+│   │   ├── achievements.ts       Evaluador de progreso de logros por actividad
 │   │   └── priceDetector.ts      MutationObserver + selectores por sitio
 │   ├── constants/
 │   │   └── kueski.ts             Reglas de negocio: niveles, tasas, puntos
@@ -142,7 +144,7 @@ kueki-widget/
 │       └── index.ts              Interfaces TypeScript del dominio
 │
 ├── server/                       Backend API REST
-│   ├── server.js                 18 endpoints Express con manejo async
+│   ├── server.js                 20 endpoints Express con manejo async
 │   └── lib/
 │       ├── db.js                 Pool pg + initSchema (CREATE TABLE IF NOT EXISTS)
 │       ├── seed.js               Usuarios, deals y compras de demo
@@ -217,6 +219,7 @@ La base de datos en **Aiven PostgreSQL** tiene 3 tablas. El esquema se crea auto
 | `cashback` | REAL | Cashback otorgado en MXN |
 | `date` | TEXT | Fecha ISO de la compra |
 | `status` | TEXT | Estado: activo, pagado o vencido |
+| `installments_paid` | INTEGER | Quincenas ya pagadas (0 por defecto) |
 
 ### Tabla `deals`
 
@@ -263,7 +266,7 @@ Todos los endpoints (salvo `login`, `refresh-token` y `health`) requieren `Autho
 | GET | `/deals?site=amazon` | Ofertas activas, marcando la del sitio actual |
 | POST | `/deals/:id/subscribe` | Suscribe al usuario a alertas de un deal |
 
-### Compras
+### Compras y calendario de pagos
 
 | Metodo | Ruta | Descripcion |
 |---|---|---|
@@ -272,6 +275,8 @@ Todos los endpoints (salvo `login`, `refresh-token` y `health`) requieren `Autho
 | GET | `/purchases` | Historial de compras del usuario (filtros: status, site) |
 | GET | `/purchases/:id` | Detalle de una compra especifica |
 | PUT | `/purchases/:id/status` | Actualiza estado: activo, pagado o vencido |
+| GET | `/user/payments/upcoming` | Proximos pagos pendientes derivados del calendario |
+| POST | `/purchases/:id/pay-installment` | Paga la siguiente quincena (restaura credito disponible) |
 
 ### Health
 
@@ -302,11 +307,15 @@ El score del usuario determina su nivel, y el nivel determina el cashback, el cr
 
 **Smart Reminder**: detecta el sitio actual y actua segun el contexto. Si hay carrito con productos muestra "Simular pago $X,XXX". Incluye un banner de aviso cuando el proximo pago del usuario vence en 7 dias o menos (ambar si quedan 3 dias o menos, azul si quedan hasta 7).
 
-**Simulacion de pagos**: pide al backend los planes personalizados para el monto del carrito. Si la compra no es elegible, muestra el motivo especifico y bloquea la confirmacion. Antes de registrar la compra muestra una pantalla de resumen (tienda, total, plan, cashback) que el usuario debe confirmar.
+**Recordatorios de pago (icono campana)**: boton en el header del widget (visible solo cuando hay sesion) que abre el panel de proximos pagos pendientes. Lista cada quincena pendiente con el sitio, monto, fecha de vencimiento y un boton "Pagar" simulado. Al pagar, el credito disponible se restaura y el proximo pago se recalcula en tiempo real sin re-login. El badge amarillo sobre la campana muestra cuantos pagos hay pendientes.
 
-**Score Coach**: muestra el nivel actual, la barra de progreso hacia el siguiente nivel y los logros del usuario. Los logros completados se muestran con estado real (tomado de la base de datos al iniciar sesion), no simulados.
+**Simulacion de pagos**: pide al backend los planes personalizados para el monto del carrito. Si la compra no es elegible, muestra el motivo especifico y bloquea la confirmacion. Antes de registrar la compra muestra una pantalla de resumen (tienda, total, plan, cashback) que el usuario debe confirmar. Al confirmar, el credito disponible baja de forma optimista y se sincroniza con el backend.
 
-**Deals Finder**: lista las ofertas disponibles en todas las tiendas compatibles. Cada tarjeta es clickeable y abre el sitio de la tienda en una nueva pestana para que el usuario vea la promo en contexto real con el widget activo.
+**Score Coach**: muestra el nivel actual, la barra de progreso hacia el siguiente nivel y los logros del usuario con su progreso real. Los logros alcanzables automaticamente (como "Usa Kueski Pay 3 veces" o "30 dias sin mora") muestran barra de progreso y se completan solos al cumplirse. El logro de "Pago a tiempo" se desbloquea al hacer el primer pago via recordatorios. El logro de "Invitar a un amigo" tiene un boton de accion directa en el panel.
+
+**Deals Finder**: lista las ofertas disponibles en todas las tiendas compatibles. La tarjeta de oferta activa usa colores de marca por sitio fijos en el frontend para que el texto blanco sea siempre legible, independientemente de si el backend ya respondio.
+
+**Credito disponible y proximo pago dinamicos**: el credito disponible y el proximo pago se actualizan en la UI tras cada compra o pago de quincena, sin necesidad de cerrar sesion. El proximo pago se deriva del calendario de pagos activos (no es un campo estatico en la BD).
 
 **Perfil de usuario**: muestra nombre, nivel, credito disponible, limite de credito, tasa de cashback, fecha y monto del proximo pago, e historial de compras expandible.
 

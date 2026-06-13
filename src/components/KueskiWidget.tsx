@@ -1,17 +1,18 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Minimize2, CreditCard, Trophy, Tag, ShoppingCart } from 'lucide-react';
+import { X, Minimize2, CreditCard, Trophy, Tag, ShoppingCart, Bell } from 'lucide-react';
 import { SmartReminder } from './SmartReminder';
 import { ScoreCoach } from './ScoreCoach';
 import { DealsFinder } from './DealsFinder';
 import { KueskiBenefits } from './KueskiBenefits';
 import { AuthModal } from './AuthModal';
 import { UserProfile } from './UserProfile';
+import { PaymentReminders } from './PaymentReminders';
 import { KueskiPayLogo } from './KueskiPayLogo';
 import type { User, Purchase, CartItem } from '../types';
 import type { ApiUser } from '../utils/api';
 import type { useScore } from '../hooks/useScore';
-import { formatMXN } from '../utils/payments';
+import { formatMXN, buildPaymentSchedule } from '../utils/payments';
 
 type TabType = 'reminder' | 'score' | 'deals';
 
@@ -32,6 +33,7 @@ interface KueskiWidgetProps {
   onConfirmPurchase: (purchase: Omit<Purchase, 'id' | 'date' | 'status'>) => void;
   onSimulatorClose: () => void;
   onOpenCheckout: () => void;
+  onPayInstallment: (purchaseId: string) => Promise<void>;
 }
 
 const TABS: { id: TabType; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -57,11 +59,18 @@ export function KueskiWidget({
   onConfirmPurchase,
   onSimulatorClose,
   onOpenCheckout,
+  onPayInstallment,
 }: KueskiWidgetProps) {
   const [isOpen, setIsOpen]           = useState(true);
   const [isMinimized, setIsMinimized] = useState(false);
   const [activeTab, setActiveTab]     = useState<TabType>('reminder');
   const [showSimulator, setShowSimulator] = useState(false);
+  const [showReminders, setShowReminders] = useState(false);
+
+  const pendingCount = useMemo(
+    () => buildPaymentSchedule(purchases).length,
+    [purchases]
+  );
 
   // Sync external simulator trigger from CartPopup
   useEffect(() => {
@@ -127,6 +136,20 @@ export function KueskiWidget({
                   )}
                 </div>
                 <div className="flex gap-1">
+                  {isLoggedIn && (
+                    <button
+                      onClick={() => setShowReminders((v) => !v)}
+                      className={`relative hover:bg-white/20 rounded-lg p-1.5 transition-colors ${showReminders ? 'bg-white/20' : ''}`}
+                      title="Recordatorios de pago"
+                    >
+                      <Bell className="w-4 h-4" />
+                      {pendingCount > 0 && (
+                        <span className="absolute -top-0.5 -right-0.5 bg-amber-400 text-gray-900 text-[9px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                          {pendingCount}
+                        </span>
+                      )}
+                    </button>
+                  )}
                   <button
                     onClick={() => setIsMinimized(true)}
                     className="hover:bg-white/20 rounded-lg p-1.5 transition-colors"
@@ -197,6 +220,20 @@ export function KueskiWidget({
             {/* Content */}
             <div className="p-4 bg-gray-50 max-h-[500px] overflow-y-auto">
               <AnimatePresence mode="wait">
+                {isLoggedIn && showReminders && (
+                  <motion.div
+                    key="reminders"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                  >
+                    <PaymentReminders
+                      purchases={purchases}
+                      onPayInstallment={onPayInstallment}
+                    />
+                  </motion.div>
+                )}
+
                 {!isLoggedIn && !showAuthModal && (
                   <motion.div
                     key="benefits"
@@ -219,7 +256,7 @@ export function KueskiWidget({
                   </motion.div>
                 )}
 
-                {isLoggedIn && user && activeTab === 'reminder' && (
+                {isLoggedIn && user && !showReminders && activeTab === 'reminder' && (
                   <motion.div
                     key="reminder"
                     initial={{ opacity: 0, x: -20 }}
@@ -241,7 +278,7 @@ export function KueskiWidget({
                   </motion.div>
                 )}
 
-                {isLoggedIn && user && activeTab === 'score' && (
+                {isLoggedIn && user && !showReminders && activeTab === 'score' && (
                   <motion.div
                     key="score"
                     initial={{ opacity: 0, x: -20 }}
@@ -249,7 +286,7 @@ export function KueskiWidget({
                     exit={{ opacity: 0, x: 20 }}
                     className="space-y-4"
                   >
-                    <ScoreCoach score={score} />
+                    <ScoreCoach score={score} purchases={purchases} />
                     <UserProfile
                       user={user}
                       currentSite={currentSite}
@@ -259,7 +296,7 @@ export function KueskiWidget({
                   </motion.div>
                 )}
 
-                {isLoggedIn && user && activeTab === 'deals' && (
+                {isLoggedIn && user && !showReminders && activeTab === 'deals' && (
                   <motion.div
                     key="deals"
                     initial={{ opacity: 0, x: -20 }}

@@ -107,16 +107,24 @@ async function initSchema(pool) {
     );
 
     CREATE TABLE IF NOT EXISTS deals (
-      id          INTEGER PRIMARY KEY,
-      site        TEXT,
-      title       TEXT,
-      description TEXT,
-      discount    TEXT,
-      tag         TEXT,
-      color       TEXT,
-      active      BOOLEAN NOT NULL DEFAULT true
+      id             INTEGER PRIMARY KEY,
+      site           TEXT,
+      title          TEXT,
+      description    TEXT,
+      discount       TEXT,
+      tag            TEXT,
+      color          TEXT,
+      active         BOOLEAN NOT NULL DEFAULT true,
+      discount_type  TEXT,
+      discount_value REAL NOT NULL DEFAULT 0
     );
   `);
+
+  // Migraciones idempotentes para BD ya existente (Aiven no recrea tablas).
+  await pool.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS discount_type  TEXT`);
+  await pool.query(`ALTER TABLE deals ADD COLUMN IF NOT EXISTS discount_value REAL NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS deal_id TEXT`);
+  await pool.query(`ALTER TABLE purchases ADD COLUMN IF NOT EXISTS installments_paid INTEGER NOT NULL DEFAULT 0`);
 }
 
 module.exports = { createPool, getPool, setPool, connectDB, disconnectDB, initSchema };

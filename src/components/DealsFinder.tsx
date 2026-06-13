@@ -20,6 +20,18 @@ interface Deal {
   color: string;
 }
 
+// Colores de tarjeta de oferta activa por sitio — clases completas en src para que
+// Tailwind las incluya en el bundle. No usamos deal.color del backend (viene como
+// gradiente sin clase base, invisible antes de la hidratación).
+const SITE_CARD_STYLES: Record<string, string> = {
+  amazon:       'bg-gradient-to-br from-[#173CEC] to-[#030B64]',
+  mercadolibre: 'bg-gradient-to-br from-[#FFD700] to-[#FFA500]',
+  liverpool:    'bg-gradient-to-br from-[#C0392B] to-[#922B21]',
+  coppel:       'bg-gradient-to-br from-[#0D52BB] to-[#030B64]',
+  elektra:      'bg-gradient-to-br from-[#8E44AD] to-[#6C3483]',
+};
+const DEFAULT_CARD_STYLE = 'bg-gradient-to-br from-[#173CEC] to-[#030B64]';
+
 // URL pública de cada tienda compatible.
 const SITE_URLS: Record<string, string> = {
   amazon:       'https://www.amazon.com.mx',
@@ -82,7 +94,7 @@ export function DealsFinder({ currentSite }: DealsFinderProps) {
           initial={{ scale: 0.95 }}
           animate={{ scale: 1 }}
           onClick={() => openSite(activeDeal.siteKey)}
-          className={`${activeDeal.color} text-white rounded-xl p-4 border-2 border-white/20 shadow-lg cursor-pointer hover:opacity-90 transition-opacity`}
+          className={`${SITE_CARD_STYLES[activeDeal.siteKey] ?? DEFAULT_CARD_STYLE} text-white rounded-xl p-4 border-2 border-white/20 shadow-lg cursor-pointer hover:opacity-90 transition-all duration-300`}
         >
           <div className="flex items-start justify-between mb-2">
             <div className="flex items-center gap-2">

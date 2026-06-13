@@ -55,37 +55,59 @@ const SITE_CONFIGS: Record<string, SiteConfig> = {
 
   liverpool: {
     totalSelectors: [
-      // Carrito y resumen de compra
-      '.resumen-compra .precio-total',
-      '.cart-total-price',
-      '.order-summary__total .price',
-      '[class*="total"] [class*="precio"]',
-      '.subtotal-price',
+      // Checkout / bolsa Liverpool
+      '[data-testid="order-summary-total"]',
+      '[data-testid*="total"]',
+      '.ld-order-summary__total-price',
+      '.bag-summary__total',
+      '.order-summary__total-price',
+      // Selectores genéricos de respaldo
+      '[class*="orderSummary"] [class*="total"]',
+      '[class*="order-summary"] [class*="total"]',
+      '[class*="resumen"] [class*="total"]',
     ],
     itemSelectors: {
-      container: '.cart-item, .product-item',
-      name: '.cart-item__title, .product-name',
-      price: '.cart-item__price, .product-price',
-      qty: '.quantity-input, [class*="quantity"] input',
+      container: '[data-testid*="cart-item"], .ld-cart-item, .cart-item, .product-item',
+      name: '[data-testid*="product-name"], .ld-cart-item__name, .cart-item__title, .product-name',
+      price: '[data-testid*="price"], .ld-cart-item__price, .cart-item__price, .product-price',
+      qty: '[data-testid*="quantity"] input, [class*="quantity"] input',
     },
   },
 
   coppel: {
     totalSelectors: [
+      '[data-testid*="total"]',
+      '[class*="ResumenOrden"] [class*="total"]',
+      '[class*="checkout"] [class*="total"]',
+      '[class*="cart"] [class*="total"]',
+      '[class*="resumen"] [class*="total"]',
+      '[class*="summary"] [class*="total"]',
       '.cart-summary-total',
       '.order-summary-total-amount',
-      '[class*="resumen"] [class*="total"]',
-      '.shopping-cart__total',
     ],
+    itemSelectors: {
+      container: '[class*="CartItem"], [class*="cart-item"], [data-testid*="cart-item"]',
+      name: '[class*="CartItem"] [class*="name"], [class*="CartItem"] [class*="title"]',
+      price: '[class*="CartItem"] [class*="price"], [class*="CartItem"] [class*="Price"]',
+      qty: '[class*="quantity"] input, [class*="Quantity"] input',
+    },
   },
 
   elektra: {
     totalSelectors: [
-      '.price-total',
-      '.cart-total-price',
+      '[data-testid*="total"]',
+      '[class*="OrderSummary"] [class*="total"]',
+      '[class*="checkout-summary"] [class*="total"]',
+      '[class*="CartSummary"] [class*="total"]',
       '[class*="TotalAmount"]',
-      '.checkout-summary__total',
+      '.price-total',
     ],
+    itemSelectors: {
+      container: '[class*="CartItem"], [class*="cart-item"], [data-testid*="cart-item"]',
+      name: '[class*="CartItem"] [class*="name"], [class*="CartItem"] [class*="title"]',
+      price: '[class*="CartItem"] [class*="price"], [class*="CartItem"] [class*="Price"]',
+      qty: '[class*="quantity"] input, [class*="Quantity"] input',
+    },
   },
 };
 
@@ -191,7 +213,57 @@ export class PriceDetector {
       const price = parseMXPrice(text);
       if (price > 0) return price;
     }
+
+    // Fallback heurístico: busca en el DOM elementos con texto de precio MX
+    // junto a etiquetas que indiquen "total" para sitios sin selectores exactos.
+    if (this.site !== 'mercadolibre') {
+      return this.extractTotalHeuristic();
+    }
     return 0;
+  }
+
+  /**
+   * Heurística de último recurso: recorre elementos de texto corto en el DOM,
+   * calcula un score por palabras clave de contexto (total > subtotal) y
+   * devuelve el precio del candidato con mayor score.
+   */
+  private extractTotalHeuristic(): number {
+    const PRICE_RE = /\$\s*[\d][\d.,]*/;
+    const candidates: Array<{ price: number; score: number }> = [];
+
+    const elements = document.querySelectorAll('span, strong, b, p, div, td, h2, h3, h4');
+    elements.forEach((el) => {
+      // Solo texto propio (sin hijos) para evitar capturar contenedores grandes
+      const ownText = Array.from(el.childNodes)
+        .filter((n) => n.nodeType === Node.TEXT_NODE)
+        .map((n) => n.textContent ?? '')
+        .join('')
+        .trim();
+
+      if (!PRICE_RE.test(ownText)) return;
+      const price = parseMXPrice(ownText);
+      if (price < 10) return; // ignorar precios irrisorios
+
+      // Contexto: propio + padre + hermano-etiqueta anterior
+      const context = [
+        ownText,
+        el.parentElement?.textContent ?? '',
+        el.previousElementSibling?.textContent ?? '',
+      ].join(' ').toLowerCase();
+
+      let score = 0;
+      if (/total a pagar|importe total|grand total/.test(context)) score += 3;
+      else if (/total|importe|bolsa|monto a pagar/.test(context)) score += 2;
+      else if (/subtotal/.test(context)) score += 1;
+
+      if (score > 0) candidates.push({ price, score });
+    });
+
+    if (candidates.length === 0) return 0;
+
+    // Mayor score; a igualdad, mayor precio (el gran total suele ser el mayor)
+    candidates.sort((a, b) => b.score - a.score || b.price - a.price);
+    return candidates[0].price;
   }
 
   private extractItems(): CartItem[] {

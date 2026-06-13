@@ -1,14 +1,31 @@
+import { useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Trophy, TrendingUp, Star, CheckCircle, Lock } from 'lucide-react';
+import { Trophy, TrendingUp, Star, CheckCircle, Lock, Users } from 'lucide-react';
 import type { useScore } from '../hooks/useScore';
+import type { Purchase } from '../types';
 import { LEVEL_COLORS, LEVEL_ORDER, LEVEL_THRESHOLDS } from '../constants/kueski';
+import { evaluateAchievements } from '../utils/achievements';
 
 interface ScoreCoachProps {
   score: ReturnType<typeof useScore>;
+  purchases: Purchase[];
 }
 
-export function ScoreCoach({ score }: ScoreCoachProps) {
-  const { points, level, achievements, nextLevelThreshold } = score;
+export function ScoreCoach({ score, purchases }: ScoreCoachProps) {
+  const { points, level, achievements, nextLevelThreshold, completeAchievement } = score;
+
+  // Auto-completar logros que ya se cumplen por actividad
+  useEffect(() => {
+    const progress = evaluateAchievements(purchases);
+    for (const p of progress) {
+      if (p.met) {
+        const ach = achievements.find((a) => a.id === p.id);
+        if (ach && !ach.completed) completeAchievement(p.id);
+      }
+    }
+  }, [purchases, achievements, completeAchievement]);
+
+  const progress = evaluateAchievements(purchases);
 
   const currentLevelIdx = LEVEL_ORDER.indexOf(level);
   const prevThreshold   = LEVEL_THRESHOLDS[level];
@@ -111,31 +128,58 @@ export function ScoreCoach({ score }: ScoreCoachProps) {
           Logros
         </h4>
         <div className="space-y-2">
-          {achievements.map((achievement) => (
-            <div
-              key={achievement.id}
-              className={`w-full flex items-center justify-between p-2 rounded-lg border ${
-                achievement.completed
-                  ? 'bg-emerald-50 border-emerald-200'
-                  : 'bg-gray-50 border-gray-200'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <div className={`rounded-full p-1 ${achievement.completed ? 'bg-emerald-500' : 'bg-gray-300'}`}>
-                  {achievement.completed
-                    ? <CheckCircle className="w-3 h-3 text-white" />
-                    : <Lock className="w-3 h-3 text-gray-500" />
-                  }
+          {achievements.map((achievement) => {
+            const prog = progress.find((p) => p.id === achievement.id);
+            return (
+              <div
+                key={achievement.id}
+                className={`w-full p-2 rounded-lg border ${
+                  achievement.completed
+                    ? 'bg-emerald-50 border-emerald-200'
+                    : 'bg-gray-50 border-gray-200'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <div className={`rounded-full p-1 ${achievement.completed ? 'bg-emerald-500' : 'bg-gray-300'}`}>
+                      {achievement.completed
+                        ? <CheckCircle className="w-3 h-3 text-white" />
+                        : <Lock className="w-3 h-3 text-gray-500" />
+                      }
+                    </div>
+                    <span className={`text-xs ${achievement.completed ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
+                      {achievement.title}
+                    </span>
+                  </div>
+                  <span className={`text-xs font-semibold shrink-0 ${achievement.completed ? 'text-emerald-600' : 'text-gray-400'}`}>
+                    +{achievement.points} pts
+                  </span>
                 </div>
-                <span className={`text-xs ${achievement.completed ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
-                  {achievement.title}
-                </span>
+                {prog && !achievement.completed && (
+                  <div className="mt-1.5 space-y-0.5">
+                    <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${Math.min((prog.current / prog.target) * 100, 100)}%` }}
+                        transition={{ duration: 0.6, ease: 'easeOut' }}
+                        className="h-full bg-[#173CEC] rounded-full"
+                      />
+                    </div>
+                    <p className="text-[10px] text-gray-400 text-right">{prog.current}/{prog.target}</p>
+                  </div>
+                )}
+                {achievement.id === 'referral' && !achievement.completed && (
+                  <button
+                    onClick={() => completeAchievement('referral')}
+                    className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-[#173CEC] bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg py-1.5 transition-colors"
+                  >
+                    <Users className="w-3 h-3" />
+                    Invitar a un amigo
+                  </button>
+                )}
               </div>
-              <span className={`text-xs font-semibold shrink-0 ${achievement.completed ? 'text-emerald-600' : 'text-gray-400'}`}>
-                +{achievement.points} pts
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

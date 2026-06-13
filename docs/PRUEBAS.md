@@ -297,4 +297,44 @@ Los componentes de Framer Motion (`motion.div`, `AnimatePresence`, etc.) se reem
 `test/setup.ts` define `crypto.randomUUID` (determinista para los tests) **preservando** `getRandomValues`/`subtle` reales de Node, que el driver de MongoDB necesita.
 
 ### PostgreSQL en memoria (pg-mem)
-Los tests de backend (`server.test.ts`, `eligibility.test.ts`) levantan una instancia efímera con `pg-mem` y conectan Mongoose a ella vía `connectDB(uri)`. No tocan ninguna base real.
+Los tests de backend (`server.test.ts`, `eligibility.test.ts`) levantan una instancia efímera con `pg-mem` y conectan el servidor a ella via `setPool`. No tocan ninguna base real.
+
+---
+
+## Escenarios de prueba manual (nuevas funcionalidades)
+
+### Recordatorios de pago
+
+| Paso | Accion | Resultado esperado |
+|------|--------|--------------------|
+| 1 | Login con `diego/kueski123` | Badge amarillo en el icono de campana muestra 2 |
+| 2 | Clic en el icono de campana | Panel de recordatorios se abre con 2 pagos (Amazon ~19 jun, Coppel ~15 jun) |
+| 3 | Clic en "Pagar" en el pago de Coppel | Confirmacion verde, el item desaparece o muestra siguiente quincena |
+| 4 | Verificar credito en tab Score | Crédito disponible subio en $666.67 |
+| 5 | Verificar proximo pago en UserProfile | Fecha actualizada al siguiente vencimiento |
+
+### Sistema de logros
+
+| Paso | Accion | Resultado esperado |
+|------|--------|--------------------|
+| 1 | Login con `carlos/kueski123` (0 logros) | Todos los logros bloqueados, "three-purchases" muestra barra 1/3 |
+| 2 | Pagar una quincena via recordatorios | Logro "pago a tiempo" se desbloquea (+25 pts) |
+| 3 | Clic en "Invitar a un amigo" en el logro de referido | Logro "referral" se desbloquea (+300 pts) |
+| 4 | Login con `sofia/kueski123` | Todos los logros completados (check verde) |
+| 5 | Login con `ana/kueski123` | "three-purchases" muestra barra 2/3 |
+
+### Credito disponible y proximo pago dinamicos
+
+| Paso | Accion | Resultado esperado |
+|------|--------|--------------------|
+| 1 | Login con `ana/kueski123` | Credito disponible: $6,000; proximo pago ~17 jun $525 |
+| 2 | Simular y confirmar compra de $1,000 | Credito baja a ~$5,000 sin re-login |
+| 3 | Pagar una quincena | Credito sube en $525, proximo pago avanza a siguiente quincena |
+
+### Fix de Deals Finder
+
+| Paso | Accion | Resultado esperado |
+|------|--------|--------------------|
+| 1 | Abrir tab Deals en cualquier sitio compatible | La tarjeta de "Oferta activa" tiene fondo azul/gradiente legible inmediatamente |
+| 2 | Esperar 2 segundos (carga de API) | El color de la tarjeta NO cambia ni se vuelve transparente |
+| 3 | Probar con diferentes sitios (amazon, liverpool) | Cada sitio muestra su color de marca distintivo, texto siempre legible |

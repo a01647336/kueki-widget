@@ -20,8 +20,9 @@ Documentación de todos los endpoints REST que requiere la versión funcional fi
 3. [Score y Gamificación](#3-score-y-gamificación)
 4. [Deals / Promociones](#4-deals--promociones)
 5. [Compras](#5-compras)
-6. [Cashback](#6-cashback)
-7. [Health Check](#7-health-check)
+6. [Calendario de pagos](#6-calendario-de-pagos)
+7. [Cashback](#7-cashback)
+8. [Health Check](#8-health-check)
 
 ---
 
@@ -838,9 +839,149 @@ Devuelve el cashback total acumulado del usuario y el detalle por compra.
 
 ---
 
-## 7. Health Check
+## 6. Calendario de pagos
 
-### 7.1 Verificar estado del servidor ✅
+### 6.1 Proximos pagos pendientes
+
+```
+GET /api/user/payments/upcoming
+```
+
+Devuelve los proximos pagos pendientes del usuario, derivados de sus compras activas. Cada item representa la siguiente quincena a pagar de una compra.
+
+**Response `200 OK`:**
+```json
+[
+  {
+    "purchaseId": "seed_carlos_1",
+    "site": "amazon",
+    "amount": 300.00,
+    "dueDate": "2026-06-24T00:00:00.000Z",
+    "installmentNumber": 3,
+    "totalInstallments": 4,
+    "remaining": 2,
+    "overdue": false,
+    "daysUntilDue": 12
+  }
+]
+```
+
+| Campo | Tipo | Descripcion |
+|-------|------|-------------|
+| `purchaseId` | `string` | ID de la compra origen |
+| `site` | `string` | Tienda donde se realizó la compra |
+| `amount` | `number` | Monto del pago en MXN |
+| `dueDate` | `string` | Fecha de vencimiento ISO 8601 |
+| `installmentNumber` | `number` | Numero de quincena (1-based) |
+| `totalInstallments` | `number` | Total de quincenas del plan |
+| `remaining` | `number` | Quincenas pendientes incluyendo esta |
+| `overdue` | `boolean` | true si la fecha ya pasó |
+| `daysUntilDue` | `number` | Dias hasta el vencimiento (negativo si vencido) |
+
+**Errores:**
+
+| Codigo | Descripcion |
+|--------|-------------|
+| `401` | Token inválido o no proporcionado |
+
+---
+
+### 6.2 Pagar siguiente quincena (simulado)
+
+```
+POST /api/purchases/:purchaseId/pay-installment
+```
+
+Registra el pago de la siguiente quincena pendiente de una compra activa. Incrementa `installments_paid`, cambia el estado a `pagado` si se completaron todas las quincenas, y restaura crédito disponible al usuario.
+
+**Parametros de ruta:**
+
+| Parametro | Tipo | Descripcion |
+|-----------|------|-------------|
+| `purchaseId` | `string` | ID de la compra |
+
+**Response `200 OK`:**
+```json
+{
+  "ok": true,
+  "purchase": {
+    "id": "seed_carlos_1",
+    "site": "amazon",
+    "amount": 1200,
+    "plan": 4,
+    "paymentPerPeriod": 300,
+    "cashback": 6,
+    "date": "2026-05-10T12:00:00.000Z",
+    "status": "activo",
+    "dealId": null,
+    "installmentsPaid": 3
+  },
+  "availableCredit": 2250.00,
+  "nextPayment": {
+    "date": "2026-07-09T00:00:00.000Z",
+    "amount": 300.00
+  }
+}
+```
+
+| Campo | Tipo | Descripcion |
+|-------|------|-------------|
+| `purchase` | `object` | Estado actualizado de la compra |
+| `availableCredit` | `number` | Crédito disponible tras restaurar el pago |
+| `nextPayment` | `object \| null` | Proximo pago pendiente del usuario (null si no hay más) |
+
+**Errores:**
+
+| Codigo | Descripcion |
+|--------|-------------|
+| `401` | Token inválido o no proporcionado |
+| `404` | Compra no encontrada o no pertenece al usuario |
+| `409` | La compra no está activa o todos los pagos ya fueron realizados |
+
+---
+
+## 7. Cashback
+
+### 7.1 Historial de cashback ✅
+
+```
+GET /api/user/cashback
+```
+
+Devuelve el historial de cashback acumulado por el usuario a partir de sus compras.
+
+**Response `200 OK`:**
+```json
+{
+  "totalEarned": 87.50,
+  "history": [
+    {
+      "purchaseId": "abc123",
+      "site": "amazon",
+      "purchaseAmount": 5000,
+      "cashbackAmount": 25.00,
+      "date": "2026-05-29T18:30:00.000Z"
+    }
+  ]
+}
+```
+
+| Campo | Tipo | Descripcion |
+|-------|------|-------------|
+| `totalEarned` | `number` | Cashback total acumulado en MXN |
+| `history` | `array` | Lista de compras que generaron cashback |
+
+**Errores:**
+
+| Codigo | Descripcion |
+|--------|-------------|
+| `401` | Token inválido o no proporcionado |
+
+---
+
+## 8. Health Check
+
+### 8.1 Verificar estado del servidor ✅
 
 ```
 GET /api/health
@@ -863,23 +1004,24 @@ Verifica que el servidor esté activo. No requiere autenticación.
 | # | Método | Ruta | Estado |
 |---|--------|------|--------|
 | 1 | POST | `/api/auth/login` | Implementado |
-| 2 | — | _(reemplaza al OTP anterior)_ | — |
-| 3 | POST | `/api/auth/logout` | Implementado |
-| 4 | POST | `/api/auth/refresh-token` | Implementado |
-| 5 | GET | `/api/user` | Implementado |
-| 6 | GET | `/api/user/score` | Implementado |
-| 7 | PUT | `/api/user/score` | Implementado |
-| 8 | POST | `/api/user/achievements/:achievementId/complete` | Implementado |
-| 9 | GET | `/api/user/preferences` | Implementado |
-| 10 | PUT | `/api/user/preferences` | Implementado |
-| 11 | GET | `/api/deals` | Implementado |
-| 12 | POST | `/api/deals/:dealId/subscribe` | Implementado |
-| 13 | POST | `/api/purchases/calculate-plans` | Implementado |
-| 14 | POST | `/api/purchases` | Implementado |
-| 15 | GET | `/api/purchases` | Implementado |
-| 16 | GET | `/api/purchases/:purchaseId` | Implementado |
-| 17 | PUT | `/api/purchases/:purchaseId/status` | Implementado |
-| 18 | GET | `/api/user/cashback` | Implementado |
-| 19 | GET | `/api/health` | Implementado |
+| 2 | POST | `/api/auth/logout` | Implementado |
+| 3 | POST | `/api/auth/refresh-token` | Implementado |
+| 4 | GET | `/api/user` | Implementado |
+| 5 | GET | `/api/user/score` | Implementado |
+| 6 | PUT | `/api/user/score` | Implementado |
+| 7 | POST | `/api/user/achievements/:achievementId/complete` | Implementado |
+| 8 | GET | `/api/user/preferences` | Implementado |
+| 9 | PUT | `/api/user/preferences` | Implementado |
+| 10 | GET | `/api/deals` | Implementado |
+| 11 | POST | `/api/deals/:dealId/subscribe` | Implementado |
+| 12 | POST | `/api/purchases/calculate-plans` | Implementado |
+| 13 | POST | `/api/purchases` | Implementado |
+| 14 | GET | `/api/purchases` | Implementado |
+| 15 | GET | `/api/purchases/:purchaseId` | Implementado |
+| 16 | PUT | `/api/purchases/:purchaseId/status` | Implementado |
+| 17 | GET | `/api/user/payments/upcoming` | Implementado |
+| 18 | POST | `/api/purchases/:purchaseId/pay-installment` | Implementado |
+| 19 | GET | `/api/user/cashback` | Implementado |
+| 20 | GET | `/api/health` | Implementado |
 
-> **Estado:** los 19 endpoints están implementados en `server/server.js` y cubiertos por pruebas de integración (`test/server.test.ts`). Todos requieren `Authorization: Bearer <accessToken>` salvo los de autenticación y health.
+> **Estado:** los 20 endpoints están implementados en `server/server.js`. Todos requieren `Authorization: Bearer <accessToken>` salvo los de autenticación y health. El campo `nextPayment` en el perfil de usuario es ahora derivado dinámicamente del calendario de pagos (no un campo estático).

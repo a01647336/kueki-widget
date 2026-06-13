@@ -4,8 +4,9 @@ import { CartPopup } from './components/CartPopup';
 import { useAuth } from './hooks/useAuth';
 import { useScore } from './hooks/useScore';
 import { storage } from './utils/storage';
-import { savePurchase, fetchScore, fetchPurchases, type ApiUser } from './utils/api';
+import { savePurchase, fetchScore, fetchPurchases, payInstallment, fetchUser, type ApiUser } from './utils/api';
 import { POINTS } from './constants/kueski';
+import { getNextPayment } from './utils/payments';
 import type { Purchase, CartItem } from './types';
 
 interface AppProps {
@@ -84,18 +85,79 @@ export default function App({
         id: crypto.randomUUID(),
         date: new Date().toISOString(),
         status: 'activo',
+        installmentsPaid: 0,
       };
       const updated = [newPurchase, ...purchases];
       setPurchases(updated);
       storage.setHistory(updated);
       score.addPoints(POINTS.PURCHASE);
-      // Persistir en la base de datos (si el servidor está disponible)
-      savePurchase(newPurchase).catch(() => {/* fallback silencioso */});
+
+      // Actualización optimista de crédito y próximo pago sin esperar al backend
+      if (auth.user) {
+        const newCredit = Math.max(0, auth.user.availableCredit - purchase.amount);
+        const nextPayment = getNextPayment(updated);
+        auth.updateUser({
+          availableCredit: newCredit,
+          ...(nextPayment ? { nextPayment } : {}),
+        });
+      }
+
+      savePurchase(newPurchase).then(() => {
+        // Refrescar datos reales del backend tras guardar
+        return fetchUser();
+      }).then((apiUser) => {
+        if (apiUser) auth.updateUser({
+          availableCredit: apiUser.availableCredit,
+          nextPayment: apiUser.nextPayment,
+        });
+        return fetchPurchases();
+      }).then((p) => {
+        if (p) { setPurchases(p); storage.setHistory(p); }
+      }).catch(() => {/* fallback silencioso */});
+
       setCheckoutOpen(false);
       setWidgetSimulatorOpen(false);
     },
-    [purchases, score]
+    [purchases, score, auth]
   );
+
+  const handlePayInstallment = useCallback(async (purchaseId: string) => {
+    // Actualización optimista local
+    const updatedLocal = purchases.map((p) =>
+      p.id === purchaseId
+        ? { ...p, installmentsPaid: (p.installmentsPaid ?? 0) + 1,
+            status: ((p.installmentsPaid ?? 0) + 1 >= p.plan ? 'pagado' : 'activo') as Purchase['status'] }
+        : p
+    );
+    setPurchases(updatedLocal);
+    storage.setHistory(updatedLocal);
+    if (auth.user) {
+      const paid = purchases.find((p) => p.id === purchaseId);
+      if (paid) {
+        const newCredit = Math.min(auth.user.creditLimit, auth.user.availableCredit + paid.paymentPerPeriod);
+        const nextPayment = getNextPayment(updatedLocal);
+        auth.updateUser({ availableCredit: newCredit, ...(nextPayment ? { nextPayment } : {}) });
+      }
+    }
+
+    // Primer pago completa el logro on-time-payment (idempotente)
+    const wasPaid = purchases.find((p) => p.id === purchaseId);
+    if (wasPaid && (wasPaid.installmentsPaid ?? 0) === 0) {
+      score.completeAchievement('on-time-payment');
+    }
+
+    // Sincronizar con el backend (autoridad)
+    const result = await payInstallment(purchaseId);
+    if (result) {
+      if (typeof result.availableCredit === 'number') {
+        const nextPayment = result.nextPayment ?? getNextPayment(updatedLocal);
+        auth.updateUser({ availableCredit: result.availableCredit, ...(nextPayment ? { nextPayment } : {}) });
+      }
+      // Refrescar historial completo
+      const fresh = await fetchPurchases();
+      if (fresh) { setPurchases(fresh); storage.setHistory(fresh); }
+    }
+  }, [purchases, auth, score]);
 
   const handlePayWithKueski = useCallback(() => {
     setCheckoutOpen(false);
@@ -121,6 +183,7 @@ export default function App({
         onConfirmPurchase={handleConfirmPurchase}
         onSimulatorClose={() => setWidgetSimulatorOpen(false)}
         onOpenCheckout={() => setCheckoutOpen(true)}
+        onPayInstallment={handlePayInstallment}
       />
 
       <CartPopup

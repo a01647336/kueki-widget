@@ -233,6 +233,62 @@ Entidades y atributos principales:
 | SitioWeb        | id_sitio (PK), nombre, tipo, compatibleKueski (boolean) |
 | Oferta          | id_oferta (PK), descripcion, descuento, id_sitio (FK) |
 
+**Esquema real de la base de datos (PostgreSQL)**
+
+Tabla `users`:
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| id | TEXT (PK) | UUID |
+| username | TEXT UNIQUE | Login |
+| password_hash | TEXT | Bcrypt hash |
+| name | TEXT | Nombre |
+| level | TEXT | Bronce / Plata / Oro / Platino |
+| credit_limit | REAL | Limite de credito en MXN |
+| available_credit | REAL | Credito disponible hoy |
+| cashback_rate | REAL | Tasa segun nivel |
+| score_points | INTEGER | Puntos acumulados |
+| next_payment_date | TEXT | Reservado (nextPayment se deriva del calendario) |
+| next_payment_amount | REAL | Reservado |
+| achievements | TEXT | JSON array de logros con estado |
+| disabled_sites | TEXT | JSON array de sitios desactivados |
+| notif_deals | BOOLEAN | Alertas de promociones |
+| notif_reminders | BOOLEAN | Recordatorios de pago |
+| subscriptions | TEXT | JSON array de deal IDs suscritos |
+
+Tabla `purchases`:
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| id | TEXT (PK) | UUID |
+| user_id | TEXT (FK) | Referencia a users.id |
+| site | TEXT | Tienda (amazon, mercadolibre, ...) |
+| amount | REAL | Monto original |
+| plan | INTEGER | Numero de quincenas |
+| payment_per_period | REAL | Monto por quincena |
+| cashback | REAL | Cashback otorgado |
+| date | TEXT | Fecha ISO de la compra |
+| status | TEXT | activo / pagado / vencido |
+| deal_id | TEXT | ID del deal aplicado (nullable) |
+| installments_paid | INTEGER | Quincenas ya pagadas (0 por defecto) |
+
+> El campo `installments_paid` permite derivar el calendario de pagos sin una tabla separada: el proximo pago de una compra se calcula como `date + 15*(installments_paid+1)` dias. Al pagar una quincena, `installments_paid` sube en 1 y el credito disponible del usuario se restaura por `payment_per_period`.
+
+Tabla `deals`:
+
+| Columna | Tipo | Descripcion |
+|---------|------|-------------|
+| id | INTEGER (PK) | |
+| site | TEXT | Tienda |
+| title | TEXT | Titulo |
+| description | TEXT | |
+| discount | TEXT | Etiqueta corta |
+| tag | TEXT | Categoria |
+| color | TEXT | Clases de color (uso interno) |
+| active | BOOLEAN | |
+| discount_type | TEXT | no_interest / cashback_bonus / free_shipping / unlock_installments |
+| discount_value | REAL | Valor del descuento segun tipo |
+
 ### B. Modelo Entidad-Relación
 
 Relaciones principales:
